@@ -1,0 +1,8 @@
+flask
+flask-cors
+pymongo
+requests
+cloudinary
+firebase-admin
+scikit-learn
+gunicorn
