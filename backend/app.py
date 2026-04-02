@@ -73,7 +73,7 @@ class MongoJSONEncoder(json.JSONEncoder):
 
 app = Flask(__name__)
 # Enable CORS for React
-CORS(app, resources={r"/*": {"origins": "*"}})
+CORS(app)
 
 # Use our custom encoder for JSON serialization
 app.json_encoder = MongoJSONEncoder
@@ -167,7 +167,7 @@ def send_push_notification(user_id, title, body, data=None):
         print(f"[FCM Error] Push failed for {user_id}: {e}")
 
 
-@app.route("/api/save-fcm-token", methods=["POST"])
+@app.route("/api/save-fcm-token", methods=["POST", "OPTIONS"])
 def save_fcm_token():
     data = request.json
     user_id = data.get('userId')
@@ -188,7 +188,7 @@ def save_fcm_token():
         return jsonify({"success": False, "message": "Database error"}), 500
 
 # --- Auth Routes ---
-@app.route("/api/signup", methods=["POST"])
+@app.route("/api/signup", methods=["POST", "OPTIONS"])
 def signup():
     data = request.json
     required_fields = ['name', 'username', 'collegeId', 'email', 'phone', 'gender', 'password']
@@ -235,7 +235,7 @@ def signup():
         print(f"Signup DB Error: {e}")
         return jsonify({"success": False, "message": "Database error"}), 500
 
-@app.route("/api/login", methods=["POST"])
+@app.route("/api/login", methods=["POST", "OPTIONS"])
 def login():
     data = request.json
     if not data or not data.get('username') or not data.get('password'):
@@ -266,7 +266,7 @@ def login():
         print(f"Login DB Error: {e}")
         return jsonify({"success": False, "message": "Database error"}), 500
 
-@app.route("/api/admin-login", methods=["POST"])
+@app.route("/api/admin-login", methods=["POST", "OPTIONS"])
 def admin_login():
     data = request.json
     if not data or not data.get('username') or not data.get('password'):
@@ -289,7 +289,7 @@ def admin_login():
     else:
         return jsonify({"success": False, "message": "Invalid Admin Credentials"}), 401
 
-@app.route("/api/user/<user_id>", methods=["GET"])
+@app.route("/api/user/<user_id>", methods=["GET", "OPTIONS"])
 def get_user(user_id):
     try:
         user = users_col.find_one({"_id": ObjectId(user_id)})
@@ -305,7 +305,7 @@ def get_user(user_id):
         print(f"Get User Error: {e}")
         return jsonify({"success": False, "message": "Database error"}), 500
 
-@app.route("/api/user/update", methods=["POST"])
+@app.route("/api/user/update", methods=["POST", "OPTIONS"])
 def update_user():
     data = request.json
     user_id = data.get('userId')
@@ -338,7 +338,7 @@ def update_user():
 
 
 # --- Ride Routes ---
-@app.route("/api/post-ride", methods=["POST"])
+@app.route("/api/post-ride", methods=["POST", "OPTIONS"])
 def post_ride():
     data = request.json
     if not data or not data.get('startingFrom') or not data.get('goingTo'):
@@ -379,7 +379,7 @@ def post_ride():
         print(f"Create Ride DB Error: {e}")
         return jsonify({"success": False, "message": "Database error"}), 500
 
-@app.route("/api/search-rides", methods=["POST"])
+@app.route("/api/search-rides", methods=["POST", "OPTIONS"])
 def search_rides():
     data = request.json
     start_loc = data.get('startingFrom', '').strip().lower()
@@ -523,7 +523,7 @@ def search_rides():
         print(f"Search Rides Error: {e}")
         return jsonify({"success": False, "message": "Database calculation error"}), 500
 
-@app.route("/api/cluster-rides", methods=["POST"])
+@app.route("/api/cluster-rides", methods=["POST", "OPTIONS"])
 def cluster_rides():
     try:
         # Fetch all rides
@@ -579,7 +579,7 @@ def cluster_rides():
         print(f"KMeans Clustering Error: {e}")
         return jsonify({"success": False, "message": "Clustering ML pipe failure", "error": str(e)}), 500
 
-@app.route("/api/match-rides", methods=["POST"])
+@app.route("/api/match-rides", methods=["POST", "OPTIONS"])
 def match_rides():
     data = request.json
     
@@ -631,7 +631,7 @@ def match_rides():
         print(f"Detour Distance Calculation ML Pipe Failure: {e}")
         return jsonify({"success": False, "message": "Database calculation error."}), 500
 
-@app.route("/api/optimize-rides", methods=["POST"])
+@app.route("/api/optimize-rides", methods=["POST", "OPTIONS"])
 def optimize_rides():
     data = request.json
     
@@ -714,7 +714,7 @@ def optimize_rides():
 
 # --- Booking Routes ---
 
-@app.route("/api/join-ride", methods=["POST"])
+@app.route("/api/join-ride", methods=["POST", "OPTIONS"])
 def join_ride():
     data = request.json
     ride_id = data.get('rideId')
@@ -777,7 +777,7 @@ def join_ride():
         print(f"Join Ride Error: {e}")
         return jsonify({"success": False, "message": "Database error"}), 500
 
-@app.route("/api/start-ride", methods=["POST"])
+@app.route("/api/start-ride", methods=["POST", "OPTIONS"])
 def start_ride():
     data = request.json
     ride_id = data.get('rideId')
@@ -813,7 +813,7 @@ def start_ride():
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
 
-@app.route("/api/end-ride", methods=["POST"])
+@app.route("/api/end-ride", methods=["POST", "OPTIONS"])
 def end_ride():
     data = request.json
     ride_id = data.get('rideId')
@@ -849,7 +849,7 @@ def end_ride():
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
 
-@app.route("/api/book-ride", methods=["POST"])
+@app.route("/api/book-ride", methods=["POST", "OPTIONS"])
 def book_ride():
     return join_ride()
 
@@ -884,7 +884,7 @@ def _normalize_ride(doc, role, current_date_str):
     return ride
 
 
-@app.route("/api/my-rides/<user_id>", methods=["GET"])
+@app.route("/api/my-rides/<user_id>", methods=["GET", "OPTIONS"])
 def get_my_rides_v2(user_id):
     try:
         current_date_str = datetime.now().strftime('%Y-%m-%d')
@@ -916,7 +916,7 @@ def get_my_rides_v2(user_id):
 
 # --- Cancellation Routes ---
 
-@app.route("/api/cancel-ride-passenger", methods=["POST"])
+@app.route("/api/cancel-ride-passenger", methods=["POST", "OPTIONS"])
 def cancel_ride_passenger():
     data = request.json
     ride_id = data.get('rideId')
@@ -972,7 +972,7 @@ def cancel_ride_passenger():
         print(f"Cancel Passenger Error: {e}")
         return jsonify({"success": False, "message": "Database error"}), 500
 
-@app.route("/api/cancel-ride-driver", methods=["POST"])
+@app.route("/api/cancel-ride-driver", methods=["POST", "OPTIONS"])
 def cancel_ride_driver():
     data = request.json
     ride_id = data.get('rideId')
@@ -1021,7 +1021,7 @@ def cancel_ride_driver():
 
 
 # Backward-compatible alias for the old POST route
-@app.route("/api/get-my-rides", methods=["POST"])
+@app.route("/api/get-my-rides", methods=["POST", "OPTIONS"])
 def get_my_rides():
     data = request.json
     user_id = data.get('userId')
@@ -1030,7 +1030,7 @@ def get_my_rides():
     return get_my_rides_v2(user_id)
 
 
-@app.route("/api/ride-history", methods=["POST"])
+@app.route("/api/ride-history", methods=["POST", "OPTIONS"])
 def ride_history():
     data = request.json
     user_id = data.get('userId')
@@ -1094,7 +1094,7 @@ def ride_history():
 
 
 # --- Communications/Messaging Routes ---
-@app.route("/api/send-message", methods=["POST"])
+@app.route("/api/send-message", methods=["POST", "OPTIONS"])
 def send_message():
     data = request.json
     sender_id = data.get('senderId')
@@ -1133,7 +1133,7 @@ def send_message():
         print(f"Send Message Error: {e}")
         return jsonify({"success": False, "message": "Database error"}), 500
 
-@app.route("/api/messages/<user_id>", methods=["GET"])
+@app.route("/api/messages/<user_id>", methods=["GET", "OPTIONS"])
 def get_messages(user_id):
     try:
         cursor = messages_col.find(
@@ -1165,7 +1165,7 @@ def get_messages(user_id):
 
 # --- Notification Routes ---
 
-@app.route("/api/notifications/<user_id>", methods=["GET"])
+@app.route("/api/notifications/<user_id>", methods=["GET", "OPTIONS"])
 def get_notifications(user_id):
     try:
         cursor = notifications_col.find(
@@ -1189,7 +1189,7 @@ def get_notifications(user_id):
         print(f"Get Notifications Error: {e}")
         return jsonify({"success": False, "message": "Database error"}), 500
 
-@app.route("/api/notifications/mark-read", methods=["POST"])
+@app.route("/api/notifications/mark-read", methods=["POST", "OPTIONS"])
 def mark_notifications_read():
     data = request.json
     user_id = data.get('userId')
@@ -1216,7 +1216,7 @@ def mark_notifications_read():
         print(f"Mark Read Error: {e}")
         return jsonify({"success": False, "message": "Database error"}), 500
 
-@app.route("/api/notifications/unread-count/<user_id>", methods=["GET"])
+@app.route("/api/notifications/unread-count/<user_id>", methods=["GET", "OPTIONS"])
 def get_unread_count(user_id):
     try:
         count = notifications_col.count_documents({"userId": user_id, "isRead": False})
@@ -1225,7 +1225,7 @@ def get_unread_count(user_id):
         return jsonify({"success": False, "count": 0}), 500
 
 # --- Ratings Routes ---
-@app.route("/api/add-rating", methods=["POST"])
+@app.route("/api/add-rating", methods=["POST", "OPTIONS"])
 def add_rating():
     data = request.json
     from_user = data.get('fromUser') or data.get('raterId')
@@ -1299,7 +1299,7 @@ def add_rating():
         print(f"Add Rating Error: {e}")
         return jsonify({"success": False, "message": "Database error"}), 500
 
-@app.route("/api/ratings/<user_id>", methods=["GET"])
+@app.route("/api/ratings/<user_id>", methods=["GET", "OPTIONS"])
 def get_user_ratings(user_id):
     try:
         received_cursor = ratings_col.find({"toUser": user_id}).sort("timestamp", -1)
@@ -1335,7 +1335,7 @@ def get_user_ratings(user_id):
 
 # --- Admin Routes ---
 
-@app.route("/api/admin/users", methods=["GET"])
+@app.route("/api/admin/users", methods=["GET", "OPTIONS"])
 def admin_get_users():
     try:
         cursor = users_col.find({})
@@ -1351,7 +1351,7 @@ def admin_get_users():
         print(f"Admin Get Users Error: {e}")
         return jsonify({"success": False, "message": "Database error"}), 500
 
-@app.route("/api/admin/verify-user", methods=["POST"])
+@app.route("/api/admin/verify-user", methods=["POST", "OPTIONS"])
 def admin_verify_user():
     data = request.json
     user_id = data.get('userId')
@@ -1370,7 +1370,7 @@ def admin_verify_user():
         print(f"Admin Verify User Error: {e}")
         return jsonify({"success": False, "message": "Database error"}), 500
 
-@app.route("/api/admin/block-user", methods=["POST"])
+@app.route("/api/admin/block-user", methods=["POST", "OPTIONS"])
 def admin_block_user():
     data = request.json
     user_id = data.get('userId')
@@ -1389,7 +1389,7 @@ def admin_block_user():
         print(f"Admin Block User Error: {e}")
         return jsonify({"success": False, "message": "Database error"}), 500
 
-@app.route("/api/admin/rides", methods=["GET"])
+@app.route("/api/admin/rides", methods=["GET", "OPTIONS"])
 def admin_get_rides():
     try:
         cursor = rides_col.find({})
@@ -1404,7 +1404,7 @@ def admin_get_rides():
         print(f"Admin Get Rides Error: {e}")
         return jsonify({"success": False, "message": "Database error"}), 500
 
-@app.route("/api/admin/reports", methods=["GET"])
+@app.route("/api/admin/reports", methods=["GET", "OPTIONS"])
 def admin_get_reports():
     try:
         # Join reports with reporter and reported user names
@@ -1454,7 +1454,7 @@ def admin_get_reports():
         print(f"Admin Get Verifications Error: {e}")
         return jsonify({"success": False, "message": str(e)}), 500
 
-@app.route("/api/user/verification/<user_id>", methods=["GET"])
+@app.route("/api/user/verification/<user_id>", methods=["GET", "OPTIONS"])
 def get_user_verification(user_id):
     try:
         verif = verifications_col.find_one({"userId": user_id})
@@ -1466,7 +1466,7 @@ def get_user_verification(user_id):
         print(f"Get User Verification Error: {e}")
         return jsonify({"success": False, "message": str(e)}), 500
 
-@app.route("/api/report-user", methods=["POST"])
+@app.route("/api/report-user", methods=["POST", "OPTIONS"])
 def report_user():
     data = request.json
     reporter_id = data.get('reporterId')
@@ -1508,7 +1508,7 @@ def report_user():
         print(f"Report User Error: {e}")
         return jsonify({"success": False, "message": "Database error"}), 500
 
-@app.route("/api/reports/user/<user_id>", methods=["GET"])
+@app.route("/api/reports/user/<user_id>", methods=["GET", "OPTIONS"])
 def get_user_reports(user_id):
     try:
         # Reports GIVEN by user
@@ -1540,7 +1540,7 @@ def get_user_reports(user_id):
         print(f"Get User Reports Error: {e}")
         return jsonify({"success": False, "message": "Database error"}), 500
 
-@app.route("/api/admin/rate-user", methods=["POST"])
+@app.route("/api/admin/rate-user", methods=["POST", "OPTIONS"])
 def admin_rate_user():
     data = request.json
     user_id = data.get('userId')
@@ -1563,7 +1563,7 @@ def admin_rate_user():
         print(f"Admin Rate User Error: {e}")
         return jsonify({"success": False, "message": "Database error"}), 500
 
-@app.route("/api/admin/ride/<ride_id>", methods=["GET"])
+@app.route("/api/admin/ride/<ride_id>", methods=["GET", "OPTIONS"])
 def admin_get_ride_details(ride_id):
     try:
         ride = rides_col.find_one({"_id": ObjectId(ride_id)})
@@ -1589,7 +1589,7 @@ def admin_get_ride_details(ride_id):
         print(f"Admin Get Ride Details Error: {e}")
         return jsonify({"success": False, "message": "Database error"}), 500
 
-@app.route("/api/ride/<ride_id>", methods=["GET"])
+@app.route("/api/ride/<ride_id>", methods=["GET", "OPTIONS"])
 def get_ride_details(ride_id):
     try:
         rid = ObjectId(ride_id) if ObjectId.is_valid(ride_id) else None
@@ -1619,7 +1619,7 @@ def get_ride_details(ride_id):
         print(f"Get Ride Details Error: {e}")
         return jsonify({"success": False, "message": str(e)}), 500
 
-@app.route("/api/admin/verifications", methods=["GET"])
+@app.route("/api/admin/verifications", methods=["GET", "OPTIONS"])
 def admin_get_verifications():
     try:
         # Join verifications with user names
@@ -1654,7 +1654,7 @@ def admin_get_verifications():
         print(f"Admin Get Verifications Error: {e}")
         return jsonify({"success": False, "message": "Database error"}), 500
 
-@app.route("/api/admin/verify/<user_id>", methods=["POST"])
+@app.route("/api/admin/verify/<user_id>", methods=["POST", "OPTIONS"])
 def admin_approve_verification(user_id):
     try:
         verifications_col.update_one(
@@ -1682,7 +1682,7 @@ def admin_approve_verification(user_id):
         print(f"Admin Approve Error: {e}")
         return jsonify({"success": False, "message": "Database error"}), 500
 
-@app.route("/api/admin/reject/<user_id>", methods=["POST"])
+@app.route("/api/admin/reject/<user_id>", methods=["POST", "OPTIONS"])
 def admin_reject_verification(user_id):
     try:
         verifications_col.update_one(
@@ -1706,7 +1706,7 @@ def admin_reject_verification(user_id):
         print(f"Admin Reject Error: {e}")
         return jsonify({"success": False, "message": "Database error"}), 500
 
-@app.route("/api/upload-documents", methods=["POST"])
+@app.route("/api/upload-documents", methods=["POST", "OPTIONS"])
 def user_upload_documents():
     try:
         user_id = request.form.get('userId')
