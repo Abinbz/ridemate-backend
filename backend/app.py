@@ -73,7 +73,7 @@ class MongoJSONEncoder(json.JSONEncoder):
 
 app = Flask(__name__)
 # Enable CORS for React
-CORS(app)
+CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 # Use our custom encoder for JSON serialization
 app.json_encoder = MongoJSONEncoder
