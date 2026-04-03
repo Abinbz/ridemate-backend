@@ -292,7 +292,7 @@ def signup():
 @app.route("/api/login", methods=["POST", "OPTIONS"])
 def login():
     data = safe_json()
-    if not data or not data.get('username') or not data.get('password'):
+    if not data or not data.get('username') or not data.get('passphrase'):
         return jsonify({"success": False, "message": "Missing credentials"}), 400
     
     # Requirement: "Validate email format and password presence"
@@ -305,7 +305,7 @@ def login():
             return jsonify({"success": False, "message": "Username cannot contain spaces"}), 400
 
     try:
-        user = users_col.find_one({"username": data['username'], "password": data['password']})
+        user = users_col.find_one({"username": data['username'], "password": data['passphrase']})
         
         if user:
             # Check if user is blocked

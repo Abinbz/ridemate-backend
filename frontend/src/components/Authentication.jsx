@@ -101,6 +101,7 @@ function Authentication() {
     }, 3000);
 
     try {
+      console.log("Current Form Data:", formData);
       const fetchUrl = `${API_BASE_URL}/api/${apiUrl}`;
       let fetchBody;
       
