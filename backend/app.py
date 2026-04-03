@@ -3,7 +3,7 @@ import os
 from werkzeug.utils import secure_filename
 from datetime import datetime, timedelta
 from bson.objectid import ObjectId
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, make_response
 from flask_cors import CORS
 from pymongo import MongoClient
 import re
@@ -73,6 +73,16 @@ class MongoJSONEncoder(json.JSONEncoder):
         return json.JSONEncoder.default(self, o)
 
 app = Flask(__name__)
+
+@app.before_request
+def handle_preflight():
+    if request.method == "OPTIONS":
+        response = make_response()
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+        return response
+
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 @app.after_request
