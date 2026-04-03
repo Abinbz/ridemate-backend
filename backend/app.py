@@ -84,11 +84,11 @@ app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10MB
 
 @app.before_request
 def log_request():
-    print(f"Incoming request: {request.method} {request.path}")
+    print(f"{request.method} {request.path}")
 
 def safe_json():
     try:
-        return request.get_json()
+        return request.get_json(force=True)
     except:
         return {}
 
@@ -110,6 +110,11 @@ try:
     # Trigger a connection test
     client.server_info()
     print("Successfully connected to MongoDB.")
+    # Export them globally
+    global users_collection, rides_collection
+    # For compatibility with snippets
+    users_collection = users_col
+    rides_collection = rides_col
 except Exception as e:
     print(f"MongoDB connection failed. Check if service is running: {e}")
 
@@ -180,8 +185,12 @@ def send_push_notification(user_id, title, body, data=None):
         response = fcm_messaging.send(message)
         print(f"[FCM Success] Push sent to {user_id} ({user.get('username') or user.get('name')}): {response}")
     except Exception as e:
-        # Token may be invalid/expired — don't crash
         print(f"[FCM Error] Push failed for {user_id}: {e}")
+
+
+@app.route("/", methods=["GET"])
+def root():
+    return jsonify({"message": "RideMate API running"}), 200
 
 
 @app.route("/api/save-fcm-token", methods=["POST", "OPTIONS"])
@@ -1036,27 +1045,16 @@ def cancel_ride_driver():
         print(f"Cancel Driver Error: {e}")
         return jsonify({"success": False, "message": "Database error"}), 500
 
-@app.route('/api/cancel-ride/<ride_id>', methods=['DELETE', 'OPTIONS'])
+@app.route("/api/cancel-ride/<ride_id>", methods=["DELETE", "OPTIONS"])
 def cancel_ride(ride_id):
-    if request.method == 'OPTIONS':
-        return '', 200
-
-    print("Cancel ride request:", ride_id)
-
     try:
-        result = db.rides.update_one(
+        rides_collection.update_one(
             {"_id": ObjectId(ride_id)},
             {"$set": {"status": "cancelled"}}
         )
-
-        if result.modified_count == 1:
-            return {"success": True}
-        else:
-            return {"success": False, "message": "Ride not found"}, 404
-
+        return jsonify({"success": True}), 200
     except Exception as e:
-        print("Cancel error:", str(e))
-        return {"success": False, "error": str(e)}, 500
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 # Backward-compatible alias for the old POST route
@@ -1803,54 +1801,35 @@ def user_upload_documents():
         print(f"Cloudinary Upload Error: {e}")
         return jsonify({"success": False, "message": f"Upload failure: {str(e)}"}), 500
 
-@app.route('/api/upload', methods=['POST', 'OPTIONS'])
+@app.route("/api/upload", methods=["POST", "OPTIONS"])
 def upload_file():
-    if request.method == 'OPTIONS':
-        return '', 200
-
-    print("Upload request received")
-
     try:
-        if 'file' not in request.files:
-            return {"success": False, "message": "No file provided"}, 400
-
-        file = request.files['file']
-
-        if file.filename == '':
-            return {"success": False, "message": "Empty filename"}, 400
+        file = request.files.get("file")
+        if not file:
+            return jsonify({"success": False, "message": "No file"}), 400
 
         filename = secure_filename(file.filename)
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        file.save(os.path.join("uploads", filename))
 
-        file.save(filepath)
-
-        print("File saved:", filepath)
-
-        return {
-            "success": True,
-            "filename": filename,
-            "message": "Upload successful"
-        }
-
+        return jsonify({"success": True, "filename": filename}), 200
     except Exception as e:
-        print("Upload error:", str(e))
-        return {"success": False, "error": str(e)}, 500
+        return jsonify({"success": False, "error": str(e)}), 500
 
 @app.route("/api/", methods=["GET", "OPTIONS"])
-def home():
+def api_home():
     try:
-        u_count = users_col.count_documents({})
-        r_count = rides_col.count_documents({})
+        u_count = users_collection.count_documents({})
+        r_count = rides_collection.count_documents({})
         return jsonify({
-            "message": "MongoDB Backend running", 
-            "users_count": u_count, 
+            "message": "MongoDB Backend running",
+            "users_count": u_count,
             "rides_count": r_count
         }), 200
-    except Exception as e:
-        return jsonify({"message": "Backend running without DB", "error": str(e)}), 200
+    except Exception:
+        return jsonify({"message": "Backend running"}), 200
 
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    print(f"Backend initiating on port {port}")
+    print(f"Starting on port {port}")
     app.run(host="0.0.0.0", port=port)
