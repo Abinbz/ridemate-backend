@@ -73,8 +73,15 @@ class MongoJSONEncoder(json.JSONEncoder):
         return json.JSONEncoder.default(self, o)
 
 app = Flask(__name__)
-# Enable CORS for React
-CORS(app)
+CORS(app, resources={r"/api/*": {"origins": "*"}}, supports_credentials=True)
+
+@app.after_request
+def after_request(response):
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS')
+    return response
+
 
 # --- Global Configurations ---
 UPLOAD_FOLDER = 'uploads'
@@ -1819,7 +1826,7 @@ def upload_file():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
-@app.route("/api/", methods=["GET"])
+@app.route("/api/", methods=["GET", "OPTIONS"])
 def api_home():
     return jsonify({
         "message": "MongoDB Backend running"
