@@ -421,14 +421,39 @@ def post_ride():
             "passengerDetails": []
         }
         
+        is_round_trip = data.get('isRoundTrip', False)
         result = rides_col.insert_one(ride_doc)
-        new_ride = parse_json(ride_doc)
-        new_ride["id"] = str(result.inserted_id)
-        
-        print("Ride created:", new_ride['fromLocation'], "->", new_ride['toLocation'])
-        print(f"Ride details: {new_ride}")
-        
-        return jsonify({"success": True, "message": "Ride posted successfully", "ride": new_ride}), 201
+        print("Forward Ride created:", ride_doc['fromLocation'], "->", ride_doc['toLocation'])
+
+        if is_round_trip:
+            print("Return ride enabled: creating second ride...")
+            return_ride = {
+                "driverId": data.get('userId') or data.get('createdBy'),
+                "driverName": data.get('username') or data.get('driver'),
+                "fromLocation": data.get('goingTo'),
+                "toLocation": data.get('startingFrom'),
+                "date": data.get('returnDate') or data.get('date'),
+                "time": data.get('returnTime') or data.get('time') or "09:00 AM",
+                "vehicleName": data.get('vehicleName', 'Unknown'),
+                "vehicleType": data.get('vehicleType', 'Car'),
+                "price": data.get('returnPrice') or data.get('price'),
+                "passengers": [], 
+                "status": "Scheduled",
+                "createdAt": datetime.now(),
+                "from": data.get('goingTo'),
+                "to": data.get('startingFrom'),
+                "createdBy": data.get('userId') or data.get('createdBy'),
+                "bookedUsers": [],
+                "passengerDetails": [],
+                "startLat": data.get('endLat'),
+                "startLng": data.get('endLng'),
+                "endLat": data.get('startLat'),
+                "endLng": data.get('startLng')
+            }
+            rides_col.insert_one(return_ride)
+            print("Return Ride created:", return_ride['fromLocation'], "->", return_ride['toLocation'])
+
+        return jsonify({"success": True, "message": "Ride(s) posted successfully"}), 201
     except Exception as e:
         print(f"Create Ride DB Error: {e}")
         return jsonify({"success": False, "message": "Database error"}), 500

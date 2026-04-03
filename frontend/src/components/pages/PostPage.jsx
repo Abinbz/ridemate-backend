@@ -190,7 +190,11 @@ function PostPage() {
         startLat: sc ? sc[0] : null,
         startLng: sc ? sc[1] : null,
         endLat: ec ? ec[0] : null,
-        endLng: ec ? ec[1] : null
+        endLng: ec ? ec[1] : null,
+        isRoundTrip: formData.isRoundTrip,
+        returnDate: formData.returnDate,
+        returnTime: formData.returnTime,
+        returnPrice: formData.returnPrice
       };
 
       console.log('Posting ride with payload:', payload);
