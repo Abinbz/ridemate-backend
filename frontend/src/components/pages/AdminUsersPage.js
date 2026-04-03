@@ -12,14 +12,16 @@ const AdminUsersPage = () => {
 
     const fetchUsers = async () => {
         try {
-            console.log("API CALL:", `${API_BASE_URL}/api/admin/users`);
-            const response = await fetch(`${API_BASE_URL}/api/admin/users`);
+            const url = `${API_BASE_URL}/api/admin/users`;
+            console.log("API CALL:", url, 'GET');
+            const response = await fetch(url);
             const data = await response.json();
             if (data.success) {
                 setUsers(data.users);
             }
         } catch (error) {
             console.error('Error fetching admin users:', error);
+            // Silent error for UI but log it
         } finally {
             setLoading(false);
         }

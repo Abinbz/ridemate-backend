@@ -137,6 +137,7 @@ function SearchPage() {
         }
       } catch (err) {
         console.error('Home data fetch error:', err);
+        showToast(`Error: ${err.message}`, 'error');
       }
     };
     fetchHomeData();
@@ -240,8 +241,8 @@ function SearchPage() {
         searchResponseData = data;
       }
     } catch (err) {
-      console.error('Could not connect to backend for search', err);
-      showToast('Server not reachable. Check backend connection.', 'error');
+      console.error('Search error:', err);
+      showToast(`Server error: ${err.message || 'Check connection'}`, 'error');
     }
 
     // Keep loading for a moment for smooth transition

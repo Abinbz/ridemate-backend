@@ -79,15 +79,13 @@ function MyRideDetailsPage() {
     const userId = localStorage.getItem('userId');
     const rideId = ride.id || ride._id;
     const isDriver = ride.role === 'Driver';
-    const endpoint = isDriver ? '/api/cancel-ride-driver' : '/api/cancel-ride-passenger';
+    const url = `${API_BASE_URL}/api/cancel-ride/${rideId}`;
     
     setCancelling(true);
     try {
-      console.log("API CALL:", `${API_BASE_URL}${endpoint}`);
-      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rideId, userId })
+      console.log("API CALL:", url, 'DELETE');
+      const response = await fetch(url, {
+        method: 'DELETE'
       });
       const data = await response.json();
       
@@ -99,7 +97,7 @@ function MyRideDetailsPage() {
       }
     } catch (err) {
       console.error(err);
-      showToast('Server not reachable. Check backend connection.', "error");
+      showToast(`Server error: ${err.message || 'Check connection'}`, "error");
     } finally {
       setCancelling(false);
     }
@@ -136,7 +134,7 @@ function MyRideDetailsPage() {
       }
     } catch (err) {
       console.error(err);
-      showToast('Server not reachable. Check backend connection.', "error");
+      showToast(`Server error: ${err.message || 'Check connection'}`, "error");
     } finally {
       setSubmittingRating(false);
     }
@@ -160,7 +158,7 @@ function MyRideDetailsPage() {
         showToast(data.message || "Failed to start ride", "error");
       }
     } catch (err) {
-      showToast("Connection error", "error");
+      showToast(`Connection error: ${err.message}`, "error");
     }
   };
 
@@ -182,7 +180,7 @@ function MyRideDetailsPage() {
         showToast(data.message || "Failed to end ride", "error");
       }
     } catch (err) {
-      showToast("Connection error", "error");
+      showToast(`Connection error: ${err.message}`, "error");
     }
   };
 

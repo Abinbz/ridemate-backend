@@ -14,8 +14,9 @@ function ReportsPage() {
     if (!userId) return;
     try {
       setLoading(true);
-      console.log("API CALL:", `${API_BASE_URL}/api/reports/user/${userId}`);
-      const res = await fetch(`${API_BASE_URL}/api/reports/user/${userId}`);
+      const url = `${API_BASE_URL}/api/reports/user/${userId}`;
+      console.log("API CALL:", url, 'GET');
+      const res = await fetch(url);
       const data = await res.json();
       if (data.success) {
         setReportsGiven(data.given || []);
@@ -23,6 +24,7 @@ function ReportsPage() {
       }
     } catch (err) {
       console.error('Fetch reports error:', err);
+      // Silent error for UX but log it
     } finally {
       setLoading(false);
     }

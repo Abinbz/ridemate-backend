@@ -67,7 +67,7 @@ function Authentication() {
     e.preventDefault();
     setError('');
 
-    const apiUrl = authMode === 'userSignup' ? 'signup' : (authMode === 'userLogin' ? 'login' : 'admin');
+    const apiUrl = authMode === 'userSignup' ? 'signup' : (authMode === 'userLogin' ? 'login' : 'admin/login');
     const isSignup = authMode === 'userSignup';
 
     if (isSignup) {
@@ -98,7 +98,7 @@ function Authentication() {
       showToast('Waking up server... please wait (up to 30s)', 'info');
     }, 3000);
 
-    console.log("API CALL:", `${API_BASE_URL}/api/${apiUrl}`);
+    console.log("API CALL:", `${API_BASE_URL}/api/${apiUrl}`, 'POST');
     try {
       const response = await fetch(`${API_BASE_URL}/api/${apiUrl}`, {
         method: 'POST',
@@ -123,7 +123,7 @@ function Authentication() {
         setError(data.message || 'Authentication failed');
       }
     } catch (err) {
-      setError('Server not reachable. Check backend connection.');
+      setError(`Server error: ${err.message || 'Check backend connection.'}`);
     } finally {
       setLoading(false);
     }

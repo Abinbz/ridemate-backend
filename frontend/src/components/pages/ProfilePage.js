@@ -36,8 +36,9 @@ function ProfilePage() {
           navigate('/');
           return;
         }
-        console.log("API CALL:", `${API_BASE_URL}/api/user/${userId}`);
-        const response = await fetch(`${API_BASE_URL}/api/user/${userId}`);
+        const url = `${API_BASE_URL}/api/user/${userId}`;
+        console.log("API CALL:", url, 'GET');
+        const response = await fetch(url);
         const data = await response.json();
         if (response.ok && data.success) {
           setUserData(data.user);
@@ -123,8 +124,9 @@ function ProfilePage() {
         formData.append('licenseNumber', licenseData.licenseNumber);
         formData.append('vehicleName', vehicles[0].vehicleName);
 
-        console.log("API CALL:", `${API_BASE_URL}/api/user/upload-docs`);
-        const response = await fetch(`${API_BASE_URL}/api/user/upload-docs`, {
+        const url = `${API_BASE_URL}/api/upload-documents`;
+        console.log("API CALL:", url, 'POST');
+        const response = await fetch(url, {
             method: 'POST',
             body: formData
         });
@@ -137,7 +139,7 @@ function ProfilePage() {
             showToast(data.message || 'Submission failed.', 'error');
         }
     } catch (error) {
-        showToast('Server error during KYC submission.', 'error');
+        showToast(`Server error: ${error.message || 'Check connection'}`, 'error');
     } finally {
         setIsSubmittingKYC(false);
     }

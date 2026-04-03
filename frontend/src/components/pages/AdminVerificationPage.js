@@ -12,8 +12,9 @@ const AdminVerificationPage = () => {
 
     const fetchVerifications = async () => {
         try {
-            console.log("API CALL:", `${API_BASE_URL}/api/admin/verifications`);
-            const response = await fetch(`${API_BASE_URL}/api/admin/verifications`);
+            const url = `${API_BASE_URL}/api/admin/verifications`;
+            console.log("API CALL:", url, 'GET');
+            const response = await fetch(url);
             const data = await response.json();
             if (data.success) {
                 setVerifications(data.verifications || []);
@@ -28,8 +29,9 @@ const AdminVerificationPage = () => {
     const handleAction = async (userId, action) => {
         try {
             const endpoint = action === 'approve' ? 'verify' : 'reject';
-            console.log("API CALL:", `${API_BASE_URL}/api/admin/${endpoint}/${userId}`);
-            const response = await fetch(`${API_BASE_URL}/api/admin/${endpoint}/${userId}`, {
+            const url = `${API_BASE_URL}/api/admin/${endpoint}/${userId}`;
+            console.log("API CALL:", url, 'POST');
+            const response = await fetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({})
@@ -41,6 +43,7 @@ const AdminVerificationPage = () => {
             }
         } catch (error) {
             console.error(`Error ${action}ing verification:`, error);
+            // Silent error for admin action feedback
         }
     };
 

@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import './App.css';
 import Authentication from './components/Authentication';
 import UserHome from './components/UserHome';
 import AdminHome from './components/AdminHome';
@@ -94,8 +95,10 @@ function AppContent() {
 
   return (
     <PWAContext.Provider value={{ handleInstall, showInstall, isInstalled }}>
-      <Router>
-        <Routes>
+      <div className="app-viewport">
+        <Router>
+          <div className="main-content scrollbar-hide">
+            <Routes>
           <Route path="/" element={<Authentication />} />
           <Route path="/user/home" element={<UserHome />} />
           <Route path="/admin/home" element={<AdminHome />} />
@@ -119,8 +122,10 @@ function AppContent() {
           <Route path="/admin/ride/:id" element={<AdminProtectedRoute><AdminHome><AdminRideDetailsPage /></AdminHome></AdminProtectedRoute>} />
           <Route path="/admin/verifications" element={<AdminProtectedRoute><AdminHome><AdminVerificationPage /></AdminHome></AdminProtectedRoute>} />
           <Route path="/admin/reports" element={<AdminProtectedRoute><AdminHome><AdminReportsPage /></AdminHome></AdminProtectedRoute>} />
-        </Routes>
-      </Router>
+            </Routes>
+          </div>
+        </Router>
+      </div>
     </PWAContext.Provider>
   );
 }

@@ -14,14 +14,16 @@ const AdminRideDetailsPage = () => {
 
     const fetchRideDetails = async () => {
         try {
-            console.log("API CALL:", `${API_BASE_URL}/api/admin/ride/${id}`);
-            const response = await fetch(`${API_BASE_URL}/api/admin/ride/${id}`);
+            const url = `${API_BASE_URL}/api/admin/ride/${id}`;
+            console.log("API CALL:", url, 'GET');
+            const response = await fetch(url);
             const data = await response.json();
             if (data.success) {
                 setRide(data.ride);
             }
         } catch (error) {
             console.error('Error fetching ride details:', error);
+            // Silent error for admin UI but log it
         } finally {
             setLoading(false);
         }

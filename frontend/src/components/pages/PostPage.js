@@ -195,7 +195,7 @@ function PostPage() {
 
       console.log('Posting ride with payload:', payload);
 
-      console.log("API CALL:", `${API_BASE_URL}/api/post-ride`);
+      console.log("API CALL:", `${API_BASE_URL}/api/post-ride`, 'POST');
       const response = await fetch(`${API_BASE_URL}/api/post-ride`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -212,7 +212,7 @@ function PostPage() {
       }
     } catch (error) {
       console.error('Error posting ride:', error);
-      alert('Server not reachable. Check backend connection.');
+      alert(`Server error: ${error.message || 'Check connection'}`);
     } finally {
       setLoading(false);
     }

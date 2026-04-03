@@ -19,8 +19,9 @@ function EditProfilePage() {
     const fetchUser = async () => {
       try {
         const userId = localStorage.getItem('userId');
-        console.log("API CALL:", `${API_BASE_URL}/api/user/${userId}`);
-        const response = await fetch(`${API_BASE_URL}/api/user/${userId}`);
+        const url = `${API_BASE_URL}/api/user/${userId}`;
+        console.log("API CALL:", url, 'GET');
+        const response = await fetch(url);
         const data = await response.json();
         if (response.ok && data.success) {
           setProfile({
@@ -49,7 +50,8 @@ function EditProfilePage() {
     setLoading(true);
     try {
       const userId = localStorage.getItem('userId');
-      console.log("API CALL:", `${API_BASE_URL}/api/user/update`);
+      const url = `${API_BASE_URL}/api/user/update`;
+      console.log("API CALL:", url, 'POST');
       const response = await fetch(`${API_BASE_URL}/api/user/update`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -65,7 +67,7 @@ function EditProfilePage() {
       }
     } catch (err) {
       console.error(err);
-      showToast('Server not reachable. Check backend connection.', 'error');
+      showToast(`Server error: ${err.message || 'Check connection'}`, 'error');
     } finally {
       setLoading(false);
     }

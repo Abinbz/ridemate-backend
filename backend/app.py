@@ -283,7 +283,7 @@ def login():
         print(f"Login DB Error: {e}")
         return jsonify({"success": False, "message": "Database error"}), 500
 
-@app.route("/api/admin-login", methods=["POST", "OPTIONS"])
+@app.route("/api/admin/login", methods=["POST", "OPTIONS"])
 def admin_login():
     data = safe_json()
     if not data or not data.get('username') or not data.get('password'):

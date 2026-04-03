@@ -66,7 +66,7 @@ function RideHistoryPage() {
       }
 
       try {
-        console.log("API CALL:", `${API_BASE_URL}/api/ride-history`);
+        console.log("API CALL:", `${API_BASE_URL}/api/ride-history`, 'POST');
         const response = await fetch(`${API_BASE_URL}/api/ride-history`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -82,6 +82,7 @@ function RideHistoryPage() {
         }
       } catch (err) {
         console.error('Fetch history error:', err);
+        // Silent error for history but log it properly in production
       } finally {
         setLoading(false);
       }

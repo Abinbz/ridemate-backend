@@ -17,8 +17,9 @@ function AdminReportsPage() {
   const fetchReports = async () => {
     try {
       setLoading(true);
-      console.log("API CALL:", `${API_BASE_URL}/api/admin/reports`);
-      const res = await fetch(`${API_BASE_URL}/api/admin/reports`);
+      const url = `${API_BASE_URL}/api/admin/reports`;
+      console.log("API CALL:", url, 'GET');
+      const res = await fetch(url);
       const data = await res.json();
       if (data.success) {
         setReports(data.reports);
@@ -26,7 +27,8 @@ function AdminReportsPage() {
         showToast(data.message || 'Failed to fetch reports', 'error');
       }
     } catch (err) {
-      showToast('Backend connection error', 'error');
+      console.error('Fetch reports error:', err);
+      showToast(`Server error: ${err.message || 'Check connection'}`, 'error');
     } finally {
       setLoading(false);
     }

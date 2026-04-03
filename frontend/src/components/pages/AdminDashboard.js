@@ -16,13 +16,18 @@ const AdminDashboard = () => {
 
     const fetchStats = async () => {
         try {
-            console.log("API CALL (Dashboard):", `${API_BASE_URL}/api/admin/users`);
-            console.log("API CALL (Dashboard):", `${API_BASE_URL}/api/admin/rides`);
-            console.log("API CALL (Dashboard):", `${API_BASE_URL}/api/admin/verifications`);
+            const usersUrl = `${API_BASE_URL}/api/admin/users`;
+            const ridesUrl = `${API_BASE_URL}/api/admin/rides`;
+            const verificationsUrl = `${API_BASE_URL}/api/admin/verifications`;
+
+            console.log("API CALL (Dashboard):", usersUrl, 'GET');
+            console.log("API CALL (Dashboard):", ridesUrl, 'GET');
+            console.log("API CALL (Dashboard):", verificationsUrl, 'GET');
+
             const [usersRes, ridesRes, verificationsRes] = await Promise.all([
-                fetch(`${API_BASE_URL}/api/admin/users`),
-                fetch(`${API_BASE_URL}/api/admin/rides`),
-                fetch(`${API_BASE_URL}/api/admin/verifications`)
+                fetch(usersUrl),
+                fetch(ridesUrl),
+                fetch(verificationsUrl)
             ]);
 
             const usersData = await usersRes.json();
@@ -40,6 +45,7 @@ const AdminDashboard = () => {
             }
         } catch (error) {
             console.error('Error fetching admin stats:', error);
+            // Silent error for dashboard components
         } finally {
             setLoading(false);
         }

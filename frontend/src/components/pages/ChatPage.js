@@ -31,8 +31,9 @@ function ChatPage() {
       if (!receiverId) return;
       try {
         const userId = localStorage.getItem('userId');
-        console.log("API CALL:", `${API_BASE_URL}/api/messages/${userId}`);
-        const response = await fetch(`${API_BASE_URL}/api/messages/${userId}`);
+        const url = `${API_BASE_URL}/api/messages/${userId}`;
+        console.log("API CALL:", url, 'GET');
+        const response = await fetch(url);
         const data = await response.json();
 
         if (response.ok && data.success) {
@@ -94,8 +95,9 @@ function ChatPage() {
     setNewMessage(''); 
 
     try {
-      console.log("API CALL:", `${API_BASE_URL}/api/send-message`);
-      const response = await fetch(`${API_BASE_URL}/api/send-message`, {
+      const url = `${API_BASE_URL}/api/send-message`;
+      console.log("API CALL:", url, 'POST');
+      const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -113,7 +115,7 @@ function ChatPage() {
       }
     } catch (err) {
       console.error('Failed to send message:', err);
-      showToast('Server not reachable. Check backend connection.', 'error');
+      showToast(`Server error: ${err.message || 'Check connection'}`, 'error');
     }
   };
 
@@ -133,8 +135,9 @@ function ChatPage() {
     try {
       setReporting(true);
       const userId = localStorage.getItem('userId');
-      console.log("API CALL:", `${API_BASE_URL}/api/report-user`);
-      const res = await fetch(`${API_BASE_URL}/api/report-user`, {
+      const url = `${API_BASE_URL}/api/report-user`;
+      console.log("API CALL:", url, 'POST');
+      const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

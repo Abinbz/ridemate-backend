@@ -62,9 +62,10 @@ const UserVerificationPage = () => {
         formData.append('rc', files.rc);
         formData.append('insurance', files.insurance);
 
-        console.log("API CALL:", `${API_BASE_URL}/api/user/upload-docs`);
+        const url = `${API_BASE_URL}/api/upload-documents`;
+        console.log("API CALL:", url, 'POST');
         try {
-            const response = await fetch(`${API_BASE_URL}/api/user/upload-docs`, {
+            const response = await fetch(url, {
                 method: 'POST',
                 body: formData,
             });
@@ -77,7 +78,7 @@ const UserVerificationPage = () => {
                 showToast(data.message || 'Upload failed.', 'error');
             }
         } catch (error) {
-            showToast('Server error during upload.', 'error');
+            showToast(`Server error: ${error.message || 'Check connection'}`, 'error');
         } finally {
             setLoading(false);
         }
