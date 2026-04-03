@@ -65,7 +65,9 @@ function Authentication() {
 
   const handleAuthSubmit = async (e) => {
     e.preventDefault();
-    setError('');
+
+    console.log("🔥 Button clicked");
+    console.log("API URL:", API_BASE_URL);
 
     const apiUrl = authMode === 'userSignup' ? 'signup' : (authMode === 'userLogin' ? 'login' : 'admin/login');
     const isSignup = authMode === 'userSignup';
@@ -98,10 +100,12 @@ function Authentication() {
       showToast('Waking up server... please wait (up to 30s)', 'info');
     }, 3000);
 
-    console.log("API URL:", API_BASE_URL);
     try {
-      const fetchUrl = isSignup ? `${API_BASE_URL}/api/signup` : `${API_BASE_URL}/api/login`;
-      const fetchBody = isSignup ? formData : { username: formData.username, passphrase: formData.password };
+      const fetchUrl = `${API_BASE_URL}/api/${apiUrl}`;
+      const fetchBody = isSignup ? formData : { 
+        username: formData.username, 
+        passphrase: formData.password 
+      };
 
       const response = await fetch(fetchUrl, {
         method: 'POST',
@@ -110,8 +114,11 @@ function Authentication() {
         },
         body: JSON.stringify(fetchBody)
       });
+      
       clearTimeout(warmupTimer);
       const data = await response.json();
+      console.log("Response:", data);
+
       if (response.ok && data.success) {
         // Persist user session for API calls
         if (data.userId) {
@@ -128,6 +135,7 @@ function Authentication() {
         setError(data.message || 'Authentication failed');
       }
     } catch (err) {
+      console.error("Fetch error:", err);
       setError(`Server error: ${err.message || 'Check backend connection.'}`);
     } finally {
       setLoading(false);
