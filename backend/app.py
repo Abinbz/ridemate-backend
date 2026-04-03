@@ -192,6 +192,10 @@ def send_push_notification(user_id, title, body, data=None):
 def root():
     return jsonify({"message": "RideMate API running"}), 200
 
+@app.route("/health")
+def health():
+    return "OK", 200
+
 
 @app.route("/api/save-fcm-token", methods=["POST", "OPTIONS"])
 def save_fcm_token():
