@@ -1,0 +1,79 @@
+
+> frontend@0.1.0 lint
+> eslint .
+
+(node:22584) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///d:/ridemate/frontend/eslint.config.js?mtime=1775213385733 is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to d:\ridemate\frontend\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+d:\ridemate\frontend\public\firebase-messaging-sw.js
+  1:1  warning  Unused eslint-disable directive (no problems were reported from 'no-restricted-globals')
+
+d:\ridemate\frontend\public\service-worker.js
+  1:1  warning  Unused eslint-disable directive (no problems were reported from 'no-restricted-globals')
+
+d:\ridemate\frontend\src\App.jsx
+  40:9  warning  'userId' is assigned a value but never used  no-unused-vars
+
+d:\ridemate\frontend\src\App.test.jsx
+  4:1  error  'test' is not defined    no-undef
+  7:3  error  'expect' is not defined  no-undef
+
+d:\ridemate\frontend\src\components\UserHome.jsx
+  49:14  warning  'e' is defined but never used  no-unused-vars
+
+d:\ridemate\frontend\src\components\pages\AdminReportsPage.jsx
+  15:6   warning  React Hook useEffect has a missing dependency: 'fetchReports'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  90:21  error    `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`                                                  react/no-unescaped-entities
+  90:75  error    `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`                                                  react/no-unescaped-entities
+
+d:\ridemate\frontend\src\components\pages\AdminRideDetailsPage.jsx
+   13:8    warning  React Hook useEffect has a missing dependency: 'fetchRideDetails'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  154:118  error    `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`                                                      react/no-unescaped-entities
+  154:171  error    `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`                                                      react/no-unescaped-entities
+
+d:\ridemate\frontend\src\components\pages\ChatPage.jsx
+  157:14  warning  'err' is defined but never used  no-unused-vars
+
+d:\ridemate\frontend\src\components\pages\MyRideDetailsPage.jsx
+   23:10  warning  'loading' is assigned a value but never used   no-unused-vars
+   79:11  warning  'userId' is assigned a value but never used    no-unused-vars
+   81:11  warning  'isDriver' is assigned a value but never used  no-unused-vars
+  106:39  warning  'isPassenger' is defined but never used        no-unused-vars
+  226:14  warning  'err' is defined but never used                no-unused-vars
+
+d:\ridemate\frontend\src\components\pages\NotificationPage.jsx
+  152:39  error  `'` can be escaped with `&apos;`, `&lsquo;`, `&#39;`, `&rsquo;`  react/no-unescaped-entities
+
+d:\ridemate\frontend\src\components\pages\ProfilePage.jsx
+  105:10  warning  'isSubmittingKYC' is assigned a value but never used  no-unused-vars
+  106:9   warning  'handleKYCSubmit' is assigned a value but never used  no-unused-vars
+
+d:\ridemate\frontend\src\components\pages\RatingsPage.jsx
+  106:91   error  `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`  react/no-unescaped-entities
+  106:106  error  `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`  react/no-unescaped-entities
+  136:91   error  `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`  react/no-unescaped-entities
+  136:106  error  `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`  react/no-unescaped-entities
+
+d:\ridemate\frontend\src\components\pages\ReportsPage.jsx
+    8:43  error    'React' is not defined                                                                                                 no-undef
+    9:49  error    'React' is not defined                                                                                                 no-undef
+   10:33  error    'React' is not defined                                                                                                 no-undef
+   33:3   error    'React' is not defined                                                                                                 no-undef
+   35:6   warning  React Hook React.useEffect has a missing dependency: 'fetchReports'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+   94:24  error    `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`                                                        react/no-unescaped-entities
+   94:39  error    `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`                                                        react/no-unescaped-entities
+  132:24  error    `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`                                                        react/no-unescaped-entities
+  132:39  error    `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`                                                        react/no-unescaped-entities
+
+d:\ridemate\frontend\src\components\pages\SearchPage.jsx
+    2:43  warning  'Popup' is defined but never used                                                                             no-unused-vars
+  144:6   warning  React Hook useEffect has a missing dependency: 'showToast'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+d:\ridemate\frontend\src\index.jsx
+  11:4  error  'React' is not defined  react/jsx-no-undef
+
+Γ£û 37 problems (20 errors, 17 warnings)
+  0 errors and 2 warnings potentially fixable with the `--fix` option.
+
