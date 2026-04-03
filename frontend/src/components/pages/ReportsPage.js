@@ -10,34 +10,11 @@ function ReportsPage() {
   const [loading, setLoading] = React.useState(true);
   const userId = localStorage.getItem('userId');
 
-  React.useEffect(() => {
-    const fetchReports = async () => {
-      try {
-        const response = await fetch(`${API_BASE_URL}/api/reports/user/${userId}`);
-        const data = await response.json();
-        if (data.success) {
-          setReportsGiven(data.given || []);
-          setReportsReceived(data.received || []);
-        }
-      } catch (error) {
-        console.error('Error fetching reports:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    if (userId) fetchReports();
-    else setLoading(false);
-  }, [userId]);
-
-  React.useEffect(() => {
-    if (userId) {
-      fetchReports();
-    }
-  }, [userId]);
-
   const fetchReports = async () => {
+    if (!userId) return;
     try {
       setLoading(true);
+      console.log("API CALL:", `${API_BASE_URL}/api/reports/user/${userId}`);
       const res = await fetch(`${API_BASE_URL}/api/reports/user/${userId}`);
       const data = await res.json();
       if (data.success) {
@@ -50,6 +27,10 @@ function ReportsPage() {
       setLoading(false);
     }
   };
+
+  React.useEffect(() => {
+    fetchReports();
+  }, [userId]);
 
   if (loading) {
     return (

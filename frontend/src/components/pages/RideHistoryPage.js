@@ -66,6 +66,7 @@ function RideHistoryPage() {
       }
 
       try {
+        console.log("API CALL:", `${API_BASE_URL}/api/ride-history`);
         const response = await fetch(`${API_BASE_URL}/api/ride-history`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

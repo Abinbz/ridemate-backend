@@ -41,6 +41,7 @@ function MyRideDetailsPage() {
       if (!rideId) return;
 
       try {
+        console.log("API CALL:", `${API_BASE_URL}/api/ride/${rideId}`);
         const response = await fetch(`${API_BASE_URL}/api/ride/${rideId}`);
         const data = await response.json();
         if (response.ok && data.success) {
@@ -82,6 +83,7 @@ function MyRideDetailsPage() {
     
     setCancelling(true);
     try {
+      console.log("API CALL:", `${API_BASE_URL}${endpoint}`);
       const response = await fetch(`${API_BASE_URL}${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -111,6 +113,7 @@ function MyRideDetailsPage() {
     setSubmittingRating(true);
     try {
       const fromUser = localStorage.getItem('userId');
+      console.log("API CALL:", `${API_BASE_URL}/api/add-rating`);
       const response = await fetch(`${API_BASE_URL}/api/add-rating`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -143,6 +146,7 @@ function MyRideDetailsPage() {
     const userId = localStorage.getItem('userId');
     const rideId = ride.id || ride._id;
     try {
+      console.log("API CALL:", `${API_BASE_URL}/api/start-ride`);
       const response = await fetch(`${API_BASE_URL}/api/start-ride`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -164,6 +168,7 @@ function MyRideDetailsPage() {
     const userId = localStorage.getItem('userId');
     const rideId = ride.id || ride._id;
     try {
+      console.log("API CALL:", `${API_BASE_URL}/api/end-ride`);
       const response = await fetch(`${API_BASE_URL}/api/end-ride`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -201,6 +206,7 @@ function MyRideDetailsPage() {
     try {
       setReporting(true);
       const userId = localStorage.getItem('userId');
+      console.log("API CALL:", `${API_BASE_URL}/api/report-user`);
       const res = await fetch(`${API_BASE_URL}/api/report-user`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

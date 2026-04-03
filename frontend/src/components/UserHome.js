@@ -41,6 +41,7 @@ function UserHome() {
     const userId = localStorage.getItem('userId');
     if (!userId) return;
     try {
+      console.log("API CALL:", `${API_BASE_URL}/api/notifications/unread-count/${userId}`);
       const res = await fetch(`${API_BASE_URL}/api/notifications/unread-count/${userId}`);
       const data = await res.json();
       if (data.success) setUnreadCount(data.count);
@@ -64,7 +65,7 @@ function UserHome() {
       try {
         const token = await requestPermissionAndToken();
         if (token) {
-          console.log('[Push] Token received, saving to backend...');
+          console.log("API CALL:", `${API_BASE_URL}/api/save-fcm-token`);
           const response = await fetch(`${API_BASE_URL}/api/save-fcm-token`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

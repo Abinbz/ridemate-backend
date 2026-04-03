@@ -17,6 +17,7 @@ function AdminReportsPage() {
   const fetchReports = async () => {
     try {
       setLoading(true);
+      console.log("API CALL:", `${API_BASE_URL}/api/admin/reports`);
       const res = await fetch(`${API_BASE_URL}/api/admin/reports`);
       const data = await res.json();
       if (data.success) {

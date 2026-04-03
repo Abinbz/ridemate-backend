@@ -1,5 +1,6 @@
 import json
 import os
+from werkzeug.utils import secure_filename
 from datetime import datetime, timedelta
 from bson.objectid import ObjectId
 from flask import Flask, jsonify, request
@@ -74,6 +75,22 @@ class MongoJSONEncoder(json.JSONEncoder):
 app = Flask(__name__)
 # Enable CORS for React
 CORS(app)
+
+# --- Global Configurations ---
+UPLOAD_FOLDER = 'uploads'
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10MB
+
+@app.before_request
+def log_request():
+    print(f"Incoming request: {request.method} {request.path}")
+
+def safe_json():
+    try:
+        return request.get_json()
+    except:
+        return {}
 
 # Use our custom encoder for JSON serialization
 app.json_encoder = MongoJSONEncoder
@@ -169,7 +186,7 @@ def send_push_notification(user_id, title, body, data=None):
 
 @app.route("/api/save-fcm-token", methods=["POST", "OPTIONS"])
 def save_fcm_token():
-    data = request.json
+    data = safe_json()
     user_id = data.get('userId')
     token = data.get('token')
     
@@ -190,7 +207,7 @@ def save_fcm_token():
 # --- Auth Routes ---
 @app.route("/api/signup", methods=["POST", "OPTIONS"])
 def signup():
-    data = request.json
+    data = safe_json()
     required_fields = ['name', 'username', 'collegeId', 'email', 'phone', 'gender', 'password']
     
     if not data or not all(k in data for k in required_fields):
@@ -237,7 +254,7 @@ def signup():
 
 @app.route("/api/login", methods=["POST", "OPTIONS"])
 def login():
-    data = request.json
+    data = safe_json()
     if not data or not data.get('username') or not data.get('password'):
         return jsonify({"success": False, "message": "Missing credentials"}), 400
     
@@ -268,7 +285,7 @@ def login():
 
 @app.route("/api/admin-login", methods=["POST", "OPTIONS"])
 def admin_login():
-    data = request.json
+    data = safe_json()
     if not data or not data.get('username') or not data.get('password'):
         return jsonify({"success": False, "message": "Missing credentials"}), 400
 
@@ -307,7 +324,7 @@ def get_user(user_id):
 
 @app.route("/api/user/update", methods=["POST", "OPTIONS"])
 def update_user():
-    data = request.json
+    data = safe_json()
     user_id = data.get('userId')
     if not user_id:
         return jsonify({"success": False, "message": "Missing userId"}), 400
@@ -340,7 +357,7 @@ def update_user():
 # --- Ride Routes ---
 @app.route("/api/post-ride", methods=["POST", "OPTIONS"])
 def post_ride():
-    data = request.json
+    data = safe_json()
     if not data or not data.get('startingFrom') or not data.get('goingTo'):
         return jsonify({"success": False, "message": "Missing route details"}), 400
         
@@ -381,7 +398,7 @@ def post_ride():
 
 @app.route("/api/search-rides", methods=["POST", "OPTIONS"])
 def search_rides():
-    data = request.json
+    data = safe_json()
     start_loc = data.get('startingFrom', '').strip().lower()
     end_loc = data.get('goingTo', '').strip().lower()
     
@@ -581,7 +598,7 @@ def cluster_rides():
 
 @app.route("/api/match-rides", methods=["POST", "OPTIONS"])
 def match_rides():
-    data = request.json
+    data = safe_json()
     
     # Extract user inputs natively
     user_start_lat = data.get('startLat')
@@ -633,7 +650,7 @@ def match_rides():
 
 @app.route("/api/optimize-rides", methods=["POST", "OPTIONS"])
 def optimize_rides():
-    data = request.json
+    data = safe_json()
     
     # Extract user inputs generically mapping from frontend mapping schema 
     user_start_lat = data.get('startLat')
@@ -716,7 +733,7 @@ def optimize_rides():
 
 @app.route("/api/join-ride", methods=["POST", "OPTIONS"])
 def join_ride():
-    data = request.json
+    data = safe_json()
     ride_id = data.get('rideId')
     user_id = data.get('userId')
 
@@ -779,7 +796,7 @@ def join_ride():
 
 @app.route("/api/start-ride", methods=["POST", "OPTIONS"])
 def start_ride():
-    data = request.json
+    data = safe_json()
     ride_id = data.get('rideId')
     user_id = data.get('userId')
 
@@ -815,7 +832,7 @@ def start_ride():
 
 @app.route("/api/end-ride", methods=["POST", "OPTIONS"])
 def end_ride():
-    data = request.json
+    data = safe_json()
     ride_id = data.get('rideId')
     user_id = data.get('userId')
 
@@ -918,7 +935,7 @@ def get_my_rides_v2(user_id):
 
 @app.route("/api/cancel-ride-passenger", methods=["POST", "OPTIONS"])
 def cancel_ride_passenger():
-    data = request.json
+    data = safe_json()
     ride_id = data.get('rideId')
     user_id = data.get('userId')
     
@@ -974,7 +991,7 @@ def cancel_ride_passenger():
 
 @app.route("/api/cancel-ride-driver", methods=["POST", "OPTIONS"])
 def cancel_ride_driver():
-    data = request.json
+    data = safe_json()
     ride_id = data.get('rideId')
     user_id = data.get('userId') # driver id
     
@@ -1019,11 +1036,33 @@ def cancel_ride_driver():
         print(f"Cancel Driver Error: {e}")
         return jsonify({"success": False, "message": "Database error"}), 500
 
+@app.route('/api/cancel-ride/<ride_id>', methods=['DELETE', 'OPTIONS'])
+def cancel_ride(ride_id):
+    if request.method == 'OPTIONS':
+        return '', 200
+
+    print("Cancel ride request:", ride_id)
+
+    try:
+        result = db.rides.update_one(
+            {"_id": ObjectId(ride_id)},
+            {"$set": {"status": "cancelled"}}
+        )
+
+        if result.modified_count == 1:
+            return {"success": True}
+        else:
+            return {"success": False, "message": "Ride not found"}, 404
+
+    except Exception as e:
+        print("Cancel error:", str(e))
+        return {"success": False, "error": str(e)}, 500
+
 
 # Backward-compatible alias for the old POST route
 @app.route("/api/get-my-rides", methods=["POST", "OPTIONS"])
 def get_my_rides():
-    data = request.json
+    data = safe_json()
     user_id = data.get('userId')
     if not user_id:
         return jsonify({"success": False, "message": "Missing userId"}), 400
@@ -1032,7 +1071,7 @@ def get_my_rides():
 
 @app.route("/api/ride-history", methods=["POST", "OPTIONS"])
 def ride_history():
-    data = request.json
+    data = safe_json()
     user_id = data.get('userId')
 
     if not user_id:
@@ -1096,7 +1135,7 @@ def ride_history():
 # --- Communications/Messaging Routes ---
 @app.route("/api/send-message", methods=["POST", "OPTIONS"])
 def send_message():
-    data = request.json
+    data = safe_json()
     sender_id = data.get('senderId')
     receiver_id = data.get('receiverId')
     message = data.get('message')
@@ -1191,7 +1230,7 @@ def get_notifications(user_id):
 
 @app.route("/api/notifications/mark-read", methods=["POST", "OPTIONS"])
 def mark_notifications_read():
-    data = request.json
+    data = safe_json()
     user_id = data.get('userId')
     notif_id = data.get('notificationId')
     
@@ -1227,7 +1266,7 @@ def get_unread_count(user_id):
 # --- Ratings Routes ---
 @app.route("/api/add-rating", methods=["POST", "OPTIONS"])
 def add_rating():
-    data = request.json
+    data = safe_json()
     from_user = data.get('fromUser') or data.get('raterId')
     to_user = data.get('toUser') or data.get('ratedUserId')
     ride_id = data.get('rideId')
@@ -1353,7 +1392,7 @@ def admin_get_users():
 
 @app.route("/api/admin/verify-user", methods=["POST", "OPTIONS"])
 def admin_verify_user():
-    data = request.json
+    data = safe_json()
     user_id = data.get('userId')
     if not user_id:
         return jsonify({"success": False, "message": "Missing userId"}), 400
@@ -1372,7 +1411,7 @@ def admin_verify_user():
 
 @app.route("/api/admin/block-user", methods=["POST", "OPTIONS"])
 def admin_block_user():
-    data = request.json
+    data = safe_json()
     user_id = data.get('userId')
     if not user_id:
         return jsonify({"success": False, "message": "Missing userId"}), 400
@@ -1468,7 +1507,7 @@ def get_user_verification(user_id):
 
 @app.route("/api/report-user", methods=["POST", "OPTIONS"])
 def report_user():
-    data = request.json
+    data = safe_json()
     reporter_id = data.get('reporterId')
     reported_id = data.get('reportedId')
     ride_id = data.get('rideId')
@@ -1542,7 +1581,7 @@ def get_user_reports(user_id):
 
 @app.route("/api/admin/rate-user", methods=["POST", "OPTIONS"])
 def admin_rate_user():
-    data = request.json
+    data = safe_json()
     user_id = data.get('userId')
     new_rating = data.get('rating')
     if not user_id or new_rating is None:
@@ -1764,7 +1803,40 @@ def user_upload_documents():
         print(f"Cloudinary Upload Error: {e}")
         return jsonify({"success": False, "message": f"Upload failure: {str(e)}"}), 500
 
-@app.route("/", methods=["GET"])
+@app.route('/api/upload', methods=['POST', 'OPTIONS'])
+def upload_file():
+    if request.method == 'OPTIONS':
+        return '', 200
+
+    print("Upload request received")
+
+    try:
+        if 'file' not in request.files:
+            return {"success": False, "message": "No file provided"}, 400
+
+        file = request.files['file']
+
+        if file.filename == '':
+            return {"success": False, "message": "Empty filename"}, 400
+
+        filename = secure_filename(file.filename)
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+
+        file.save(filepath)
+
+        print("File saved:", filepath)
+
+        return {
+            "success": True,
+            "filename": filename,
+            "message": "Upload successful"
+        }
+
+    except Exception as e:
+        print("Upload error:", str(e))
+        return {"success": False, "error": str(e)}, 500
+
+@app.route("/api/", methods=["GET", "OPTIONS"])
 def home():
     try:
         u_count = users_col.count_documents({})

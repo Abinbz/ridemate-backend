@@ -12,6 +12,7 @@ const AdminVerificationPage = () => {
 
     const fetchVerifications = async () => {
         try {
+            console.log("API CALL:", `${API_BASE_URL}/api/admin/verifications`);
             const response = await fetch(`${API_BASE_URL}/api/admin/verifications`);
             const data = await response.json();
             if (data.success) {
@@ -27,8 +28,11 @@ const AdminVerificationPage = () => {
     const handleAction = async (userId, action) => {
         try {
             const endpoint = action === 'approve' ? 'verify' : 'reject';
+            console.log("API CALL:", `${API_BASE_URL}/api/admin/${endpoint}/${userId}`);
             const response = await fetch(`${API_BASE_URL}/api/admin/${endpoint}/${userId}`, {
-                method: 'POST'
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({})
             });
             const data = await response.json();
             if (data.success) {

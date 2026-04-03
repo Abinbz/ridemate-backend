@@ -67,7 +67,7 @@ function Authentication() {
     e.preventDefault();
     setError('');
 
-    const apiUrl = authMode === 'userSignup' ? 'signup' : (authMode === 'userLogin' ? 'login' : 'admin-login');
+    const apiUrl = authMode === 'userSignup' ? 'signup' : (authMode === 'userLogin' ? 'login' : 'admin');
     const isSignup = authMode === 'userSignup';
 
     if (isSignup) {
@@ -98,6 +98,7 @@ function Authentication() {
       showToast('Waking up server... please wait (up to 30s)', 'info');
     }, 3000);
 
+    console.log("API CALL:", `${API_BASE_URL}/api/${apiUrl}`);
     try {
       const response = await fetch(`${API_BASE_URL}/api/${apiUrl}`, {
         method: 'POST',

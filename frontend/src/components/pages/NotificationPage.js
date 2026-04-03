@@ -31,6 +31,7 @@ function NotificationPage() {
     if (!userId) return;
 
     try {
+      console.log("API CALL:", `${API_BASE_URL}/api/notifications/${userId}`);
       const response = await fetch(`${API_BASE_URL}/api/notifications/${userId}`);
       const data = await response.json();
       if (response.ok && data.success) {
@@ -49,6 +50,7 @@ function NotificationPage() {
     if (!userId) return;
 
     try {
+      console.log("API CALL:", `${API_BASE_URL}/api/notifications/mark-read`);
       await fetch(`${API_BASE_URL}/api/notifications/mark-read`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -66,6 +68,7 @@ function NotificationPage() {
     const userId = localStorage.getItem('userId');
     if (!notif.isRead) {
       try {
+        console.log("API CALL:", `${API_BASE_URL}/api/notifications/mark-read`);
         await fetch(`${API_BASE_URL}/api/notifications/mark-read`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

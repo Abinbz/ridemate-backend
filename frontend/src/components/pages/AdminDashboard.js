@@ -16,6 +16,9 @@ const AdminDashboard = () => {
 
     const fetchStats = async () => {
         try {
+            console.log("API CALL (Dashboard):", `${API_BASE_URL}/api/admin/users`);
+            console.log("API CALL (Dashboard):", `${API_BASE_URL}/api/admin/rides`);
+            console.log("API CALL (Dashboard):", `${API_BASE_URL}/api/admin/verifications`);
             const [usersRes, ridesRes, verificationsRes] = await Promise.all([
                 fetch(`${API_BASE_URL}/api/admin/users`),
                 fetch(`${API_BASE_URL}/api/admin/rides`),

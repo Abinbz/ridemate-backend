@@ -38,7 +38,7 @@ export const usePWA = () => {
 const AdminProtectedRoute = ({ children }) => {
   const userId = localStorage.getItem('userId');
   const isAdminToken = localStorage.getItem('isAdmin'); // We'll set this in Authentication.js
-  
+
   if (isAdminToken !== 'true') {
     return <Navigate to="/" replace />;
   }
@@ -110,7 +110,7 @@ function AppContent() {
           <Route path="/user/ride-history" element={<RideHistoryPage />} />
           <Route path="/user/verify" element={<UserVerificationPage />} />
           <Route path="/map-picker" element={<MapPicker />} />
-          
+
           {/* Admin Routes */}
           <Route path="/admin/home" element={<AdminProtectedRoute><AdminHome /></AdminProtectedRoute>} />
           <Route path="/admin/dashboard" element={<AdminProtectedRoute><AdminHome><AdminDashboard /></AdminHome></AdminProtectedRoute>} />

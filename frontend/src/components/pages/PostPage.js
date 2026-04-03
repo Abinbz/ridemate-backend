@@ -195,6 +195,7 @@ function PostPage() {
 
       console.log('Posting ride with payload:', payload);
 
+      console.log("API CALL:", `${API_BASE_URL}/api/post-ride`);
       const response = await fetch(`${API_BASE_URL}/api/post-ride`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

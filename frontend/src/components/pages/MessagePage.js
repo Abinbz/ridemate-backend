@@ -11,6 +11,7 @@ function MessagePage() {
     const fetchMessages = async () => {
       try {
         const userId = localStorage.getItem('userId');
+        console.log("API CALL:", `${API_BASE_URL}/api/messages/${userId}`);
         const response = await fetch(`${API_BASE_URL}/api/messages/${userId}`);
         const data = await response.json();
 

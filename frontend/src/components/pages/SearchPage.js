@@ -124,6 +124,7 @@ function SearchPage() {
       const userId = localStorage.getItem('userId');
       if (!userId) return;
       try {
+        console.log("API CALL:", `${API_BASE_URL}/api/my-rides/${userId}`);
         const response = await fetch(`${API_BASE_URL}/api/my-rides/${userId}`);
         const data = await response.json();
         if (response.ok && data.success) {
@@ -228,7 +229,7 @@ function SearchPage() {
         endLat: ec[0],
         endLng: ec[1]
       };
-
+      console.log("API CALL:", `${API_BASE_URL}/api/search-rides`);
       const response = await fetch(`${API_BASE_URL}/api/search-rides`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

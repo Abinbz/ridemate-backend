@@ -36,6 +36,7 @@ function ProfilePage() {
           navigate('/');
           return;
         }
+        console.log("API CALL:", `${API_BASE_URL}/api/user/${userId}`);
         const response = await fetch(`${API_BASE_URL}/api/user/${userId}`);
         const data = await response.json();
         if (response.ok && data.success) {
@@ -122,6 +123,7 @@ function ProfilePage() {
         formData.append('licenseNumber', licenseData.licenseNumber);
         formData.append('vehicleName', vehicles[0].vehicleName);
 
+        console.log("API CALL:", `${API_BASE_URL}/api/user/upload-docs`);
         const response = await fetch(`${API_BASE_URL}/api/user/upload-docs`, {
             method: 'POST',
             body: formData

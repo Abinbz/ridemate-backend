@@ -71,6 +71,7 @@ function MyRidesPage() {
       }
 
       try {
+        console.log("API CALL:", `${API_BASE_URL}/api/my-rides/${userId}`);
         const response = await fetch(`${API_BASE_URL}/api/my-rides/${userId}`);
         const data = await response.json();
         console.log('My Rides API response:', data);

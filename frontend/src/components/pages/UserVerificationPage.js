@@ -28,6 +28,7 @@ const UserVerificationPage = () => {
         try {
             const userId = localStorage.getItem('userId');
             if (!userId) return;
+            console.log("API CALL:", `${API_BASE_URL}/api/user/verification/${userId}`);
             const response = await fetch(`${API_BASE_URL}/api/user/verification/${userId}`);
             const data = await response.json();
             if (data.success && data.verification) {
@@ -61,8 +62,9 @@ const UserVerificationPage = () => {
         formData.append('rc', files.rc);
         formData.append('insurance', files.insurance);
 
+        console.log("API CALL:", `${API_BASE_URL}/api/user/upload-docs`);
         try {
-            const response = await fetch(`${API_BASE_URL}/api/upload-documents`, {
+            const response = await fetch(`${API_BASE_URL}/api/user/upload-docs`, {
                 method: 'POST',
                 body: formData,
             });

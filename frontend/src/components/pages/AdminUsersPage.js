@@ -12,6 +12,7 @@ const AdminUsersPage = () => {
 
     const fetchUsers = async () => {
         try {
+            console.log("API CALL:", `${API_BASE_URL}/api/admin/users`);
             const response = await fetch(`${API_BASE_URL}/api/admin/users`);
             const data = await response.json();
             if (data.success) {

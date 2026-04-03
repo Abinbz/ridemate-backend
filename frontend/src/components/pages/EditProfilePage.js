@@ -19,6 +19,7 @@ function EditProfilePage() {
     const fetchUser = async () => {
       try {
         const userId = localStorage.getItem('userId');
+        console.log("API CALL:", `${API_BASE_URL}/api/user/${userId}`);
         const response = await fetch(`${API_BASE_URL}/api/user/${userId}`);
         const data = await response.json();
         if (response.ok && data.success) {
@@ -48,6 +49,7 @@ function EditProfilePage() {
     setLoading(true);
     try {
       const userId = localStorage.getItem('userId');
+      console.log("API CALL:", `${API_BASE_URL}/api/user/update`);
       const response = await fetch(`${API_BASE_URL}/api/user/update`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

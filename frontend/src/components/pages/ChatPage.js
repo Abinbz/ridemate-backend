@@ -31,6 +31,7 @@ function ChatPage() {
       if (!receiverId) return;
       try {
         const userId = localStorage.getItem('userId');
+        console.log("API CALL:", `${API_BASE_URL}/api/messages/${userId}`);
         const response = await fetch(`${API_BASE_URL}/api/messages/${userId}`);
         const data = await response.json();
 
@@ -93,6 +94,7 @@ function ChatPage() {
     setNewMessage(''); 
 
     try {
+      console.log("API CALL:", `${API_BASE_URL}/api/send-message`);
       const response = await fetch(`${API_BASE_URL}/api/send-message`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -131,6 +133,7 @@ function ChatPage() {
     try {
       setReporting(true);
       const userId = localStorage.getItem('userId');
+      console.log("API CALL:", `${API_BASE_URL}/api/report-user`);
       const res = await fetch(`${API_BASE_URL}/api/report-user`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

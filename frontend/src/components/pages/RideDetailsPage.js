@@ -41,6 +41,7 @@ function RideDetailsPage() {
 
     setBooking(true);
     try {
+      console.log("API CALL:", `${API_BASE_URL}/api/join-ride`);
       const response = await fetch(`${API_BASE_URL}/api/join-ride`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

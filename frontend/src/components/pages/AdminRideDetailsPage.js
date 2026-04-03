@@ -14,6 +14,7 @@ const AdminRideDetailsPage = () => {
 
     const fetchRideDetails = async () => {
         try {
+            console.log("API CALL:", `${API_BASE_URL}/api/admin/ride/${id}`);
             const response = await fetch(`${API_BASE_URL}/api/admin/ride/${id}`);
             const data = await response.json();
             if (data.success) {
