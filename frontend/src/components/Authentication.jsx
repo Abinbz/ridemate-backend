@@ -102,10 +102,25 @@ function Authentication() {
 
     try {
       const fetchUrl = `${API_BASE_URL}/api/${apiUrl}`;
-      const fetchBody = isSignup ? formData : { 
-        username: formData.username, 
-        passphrase: formData.password 
-      };
+      let fetchBody;
+      
+      if (isSignup) {
+        fetchBody = formData;
+      } else if (authMode === 'adminLogin') {
+        // Admin login expects adminId and password
+        fetchBody = { 
+          adminId: formData.username, 
+          password: formData.password 
+        };
+      } else {
+        // User login expects username and passphrase
+        fetchBody = { 
+          username: formData.username, 
+          passphrase: formData.password 
+        };
+      }
+
+      console.log("Sending:", authMode, fetchBody);
 
       const response = await fetch(fetchUrl, {
         method: 'POST',
@@ -120,17 +135,19 @@ function Authentication() {
       console.log("Response:", data);
 
       if (response.ok && data.success) {
-        // Persist user session for API calls
-        if (data.userId) {
-          localStorage.setItem('userId', data.userId);
-          localStorage.setItem('username', formData.username);
-        }
         if (authMode === 'adminLogin') {
+          showToast('Admin Login Successful', 'success');
+          alert('Login successful');
           localStorage.setItem('isAdmin', 'true');
+          navigate('/admin/home');
         } else {
+          if (data.userId) {
+            localStorage.setItem('userId', data.userId);
+            localStorage.setItem('username', formData.username);
+          }
           localStorage.setItem('isAdmin', 'false');
+          navigate('/user/home');
         }
-        navigate(authMode === 'adminLogin' ? '/admin/dashboard' : '/user/home');
       } else {
         setError(data.message || 'Authentication failed');
       }
