@@ -46,23 +46,36 @@ function ChatPage() {
 
         if (response.ok && data.success) {
           const chatHistory = data.messages
-            .filter(msg => msg.senderId === receiverId || msg.receiverId === receiverId)
-            .map(msg => ({
-              id: msg.id || msg._id,
-              sender: msg.senderId === userId ? 'me' : 'other',
-              text: msg.message,
-              seen: msg.seen || false,
-              time: new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-            }));
+            .filter(msg => {
+              const sid = msg.senderId?.toString();
+              const rid = msg.receiverId?.toString();
+              const target = receiverId?.toString();
+              return sid === target || rid === target;
+            })
+            .map(msg => {
+              const userIdStr = localStorage.getItem('userId')?.toString();
+              const senderIdStr = msg.senderId?.toString();
+              // CRITICAL DEBUG: Ensure alignment comparison is exact
+              const isMe = senderIdStr === userIdStr;
+              
+              return {
+                id: msg.id || msg._id,
+                sender: isMe ? 'me' : 'other',
+                text: msg.message,
+                seen: msg.seen || false,
+                time: new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                rawSender: msg.senderId // For console debugging
+              };
+            });
 
           setMessages(prev => {
             if (JSON.stringify(prev) !== JSON.stringify(chatHistory)) {
+              console.log("Chat Updated - Messages Count:", chatHistory.length);
               return chatHistory;
             }
             return prev;
           });
           
-          // If latest message is from partner and unread, mark all as read
           const lastMsg = chatHistory[chatHistory.length - 1];
           if (lastMsg && lastMsg.sender === 'other' && !lastMsg.seen) {
             markMessagesAsRead();
@@ -81,10 +94,13 @@ function ChatPage() {
   }, [receiverId]);
 
   useEffect(() => {
-    if (!loading) {
-      scrollToBottom();
+    if (!loading && messages.length > 0) {
+      // Force scroll to bottom whenever messages list or loading state changes
+      setTimeout(() => {
+        scrollToBottom();
+      }, 50);
     }
-  }, [messages, loading]);
+  }, [messages.length, loading]);
 
   const handleSend = async () => {
     if (!newMessage.trim() || !receiverId) return;
@@ -97,6 +113,7 @@ function ChatPage() {
     const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const tempId = Date.now().toString();
 
+    // OPTIMISTIC UPDATE
     setMessages(prev => [...prev, {
       id: tempId,
       sender: 'me',
@@ -212,34 +229,37 @@ function ChatPage() {
       </div>
 
       {/* ── Messages Area ── */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 flex flex-col scrollbar-whatsapp">
+      <div className="flex-1 overflow-y-auto px-4 py-6 scrollbar-whatsapp">
         {loading ? (
           <div className="flex-1 flex items-center justify-center">
             <LoadingSpinner />
           </div>
         ) : (
-          <div className="flex flex-col gap-1 w-full">
-            {messages.map((msg) => (
-              <div
-                key={msg.id}
-                className={`bubble animate-in fade-in slide-in-from-bottom-2 duration-300 ${msg.sender === 'me' ? 'right' : 'left'}`}
-              >
-                <div className="text-[14.2px] break-words">
-                  {msg.text}
+          <div className="flex flex-col gap-1 w-full min-h-full">
+            {messages.map((msg) => {
+              // DEBUG: Log sender comparison result
+              return (
+                <div
+                  key={msg.id}
+                  className={`bubble animate-in duration-300 ${msg.sender === 'me' ? 'right' : 'left'}`}
+                >
+                  <div className="text-[14.2px] break-words">
+                    {msg.text}
+                  </div>
+                  <div className="bubble-meta">
+                    <span className="bubble-time">{msg.time}</span>
+                    {msg.sender === 'me' && (
+                      <div className="bubble-ticks">
+                        <svg viewBox="0 0 16 11" width="15" height="10" className={`tick-icon ${msg.seen ? 'seen' : ''}`} fill="currentColor">
+                          <path d="M15.01 3.316l-.478-.372a.365.365 0 0 0-.51.063L8.666 9.879a.32.32 0 0 1-.484.033l-.358-.325a.319.319 0 0 0-.484.032l-.378.483a.418.418 0 0 0 .036.541l1.32 1.266a.32.32 0 0 0 .484-.032l6.273-7.982a.366.366 0 0 0-.063-.51zm-4.257.006l-.479-.373a.367.367 0 0 0-.512.063L4.409 10.155a.32.32 0 0 1-.484.033l-1.383-1.041a.367.367 0 0 0-.511.063l-.478.372a.418.418 0 0 0-.063.541l2.251 2.97a.32.32 0 0 0 .484-.032l6.54-9.805a.367.367 0 0 0-.063-.51z"></path>
+                        </svg>
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div className="bubble-meta">
-                  <span className="bubble-time">{msg.time}</span>
-                  {msg.sender === 'me' && (
-                    <div className="bubble-ticks">
-                      <svg viewBox="0 0 16 11" width="16" height="11" className={`tick-icon ${msg.seen ? 'seen' : ''}`} fill="currentColor">
-                        <path d="M15.01 3.316l-.478-.372a.365.365 0 0 0-.51.063L8.666 9.879a.32.32 0 0 1-.484.033l-.358-.325a.319.319 0 0 0-.484.032l-.378.483a.418.418 0 0 0 .036.541l1.32 1.266a.32.32 0 0 0 .484-.032l6.273-7.982a.366.366 0 0 0-.063-.51zm-4.257.006l-.479-.373a.367.367 0 0 0-.512.063L4.409 10.155a.32.32 0 0 1-.484.033l-1.383-1.041a.367.367 0 0 0-.511.063l-.478.372a.418.418 0 0 0-.063.541l2.251 2.97a.32.32 0 0 0 .484-.032l6.54-9.805a.367.367 0 0 0-.063-.51z"></path>
-                      </svg>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
-            <div ref={messagesEndRef} className="h-4" />
+              );
+            })}
+            <div ref={messagesEndRef} className="h-2 w-full" />
           </div>
         )}
       </div>

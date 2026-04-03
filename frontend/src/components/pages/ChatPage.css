@@ -13,17 +13,20 @@
     font-size: 14.5px;
     line-height: 1.4;
     box-shadow: 0 1px 0.5px rgba(0, 0, 0, 0.13);
-    margin-bottom: 2px;
+    margin-bottom: 4px;
+    /* CRITICAL: Ensure tails are not clipped */
+    overflow: visible !important;
 }
 
-/* Tails */
+/* Tails - WhatsApp Style triangle */
 .bubble::before {
     content: "";
     position: absolute;
     top: 0;
     width: 0;
     height: 0;
-    border: 10px solid transparent;
+    border: 8px solid transparent;
+    z-index: 1;
 }
 
 .bubble.right {
@@ -34,9 +37,11 @@
 }
 
 .bubble.right::before {
-    right: -10px;
+    right: -8px;
     border-top-color: #dcf8c6;
     border-left-color: #dcf8c6;
+    border-right: 0;
+    border-bottom: 0;
 }
 
 .bubble.left {
@@ -47,9 +52,11 @@
 }
 
 .bubble.left::before {
-    left: -10px;
+    left: -8px;
     border-top-color: #ffffff;
     border-right-color: #ffffff;
+    border-left: 0;
+    border-bottom: 0;
 }
 
 .bubble-meta {
