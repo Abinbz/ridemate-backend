@@ -1174,7 +1174,8 @@ def send_message():
             "senderId": sender_id,
             "receiverId": receiver_id,
             "message": message,
-            "timestamp": datetime.now()
+            "timestamp": datetime.now(),
+            "seen": False
         }
         messages_col.insert_one(msg_doc)
         
@@ -1226,6 +1227,26 @@ def get_messages(user_id):
         return jsonify({"success": True, "messages": messages}), 200
     except Exception as e:
         print(f"Get Messages Error: {e}")
+        return jsonify({"success": False, "message": "Database error"}), 500
+
+@app.route("/api/messages/mark-read", methods=["POST", "OPTIONS"])
+def mark_messages_read():
+    data = safe_json()
+    user_id = data.get('userId')
+    partner_id = data.get('partnerId')
+    
+    if not user_id or not partner_id:
+        return jsonify({"success": False, "message": "Missing required IDs"}), 400
+        
+    try:
+        # Mark all messages SENT BY partner TO user as seen
+        messages_col.update_many(
+            {"senderId": partner_id, "receiverId": user_id, "seen": False},
+            {"$set": {"seen": True}}
+        )
+        return jsonify({"success": True, "message": "Messages marked as read"}), 200
+    except Exception as e:
+        print(f"Mark Read Error: {e}")
         return jsonify({"success": False, "message": "Database error"}), 500
 
 # --- Notification Routes ---

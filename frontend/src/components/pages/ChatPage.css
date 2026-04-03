@@ -1,0 +1,91 @@
+/* WhatsApp Style Chat Bubbles */
+.chat-container {
+    background-color: #e5ddd5;
+    background-image: url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png');
+    background-repeat: repeat;
+}
+
+.bubble {
+    max-width: 80%;
+    padding: 8px 12px 8px 12px;
+    border-radius: 8px;
+    position: relative;
+    font-size: 14.5px;
+    line-height: 1.4;
+    box-shadow: 0 1px 0.5px rgba(0, 0, 0, 0.13);
+    margin-bottom: 2px;
+}
+
+/* Tails */
+.bubble::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    width: 0;
+    height: 0;
+    border: 10px solid transparent;
+}
+
+.bubble.right {
+    background-color: #dcf8c6;
+    align-self: flex-end;
+    margin-left: 50px;
+    border-top-right-radius: 0;
+}
+
+.bubble.right::before {
+    right: -10px;
+    border-top-color: #dcf8c6;
+    border-left-color: #dcf8c6;
+}
+
+.bubble.left {
+    background-color: #ffffff;
+    align-self: flex-start;
+    margin-right: 50px;
+    border-top-left-radius: 0;
+}
+
+.bubble.left::before {
+    left: -10px;
+    border-top-color: #ffffff;
+    border-right-color: #ffffff;
+}
+
+.bubble-meta {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 4px;
+    margin-top: 4px;
+    float: suffix;
+}
+
+.bubble-time {
+    font-size: 11px;
+    color: rgba(0, 0, 0, 0.45);
+}
+
+.bubble-ticks {
+    display: flex;
+    align-items: center;
+}
+
+.tick-icon {
+    width: 16px;
+    height: 16px;
+    color: #999;
+}
+
+.tick-icon.seen {
+    color: #4fc3f7;
+}
+
+/* Custom Scrollbar */
+.scrollbar-whatsapp::-webkit-scrollbar {
+    width: 6px;
+}
+
+.scrollbar-whatsapp::-webkit-scrollbar-thumb {
+    background-color: rgba(0, 0, 0, 0.2);
+}
