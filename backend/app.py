@@ -1815,21 +1815,13 @@ def upload_file():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
-@app.route("/api/", methods=["GET", "OPTIONS"])
+@app.route("/api/", methods=["GET"])
 def api_home():
-    try:
-        u_count = users_collection.count_documents({})
-        r_count = rides_collection.count_documents({})
-        return jsonify({
-            "message": "MongoDB Backend running",
-            "users_count": u_count,
-            "rides_count": r_count
-        }), 200
-    except Exception:
-        return jsonify({"message": "Backend running"}), 200
+    return jsonify({
+        "message": "MongoDB Backend running"
+    }), 200
 
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    print(f"Starting on port {port}")
     app.run(host="0.0.0.0", port=port)
