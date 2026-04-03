@@ -237,24 +237,26 @@ function ChatPage() {
         ) : (
           <div className="flex flex-col gap-1 w-full min-h-full">
             {messages.map((msg) => {
-              // DEBUG: Log sender comparison result
+              const isMe = msg.sender === 'me';
               return (
-                <div
-                  key={msg.id}
-                  className={`bubble animate-in duration-300 ${msg.sender === 'me' ? 'right' : 'left'}`}
+                <div 
+                  key={msg.id} 
+                  className={`w-full flex ${isMe ? 'justify-end' : 'justify-start'}`}
                 >
-                  <div className="text-[14.2px] break-words">
-                    {msg.text}
-                  </div>
-                  <div className="bubble-meta">
-                    <span className="bubble-time">{msg.time}</span>
-                    {msg.sender === 'me' && (
-                      <div className="bubble-ticks">
-                        <svg viewBox="0 0 16 11" width="15" height="10" className={`tick-icon ${msg.seen ? 'seen' : ''}`} fill="currentColor">
-                          <path d="M15.01 3.316l-.478-.372a.365.365 0 0 0-.51.063L8.666 9.879a.32.32 0 0 1-.484.033l-.358-.325a.319.319 0 0 0-.484.032l-.378.483a.418.418 0 0 0 .036.541l1.32 1.266a.32.32 0 0 0 .484-.032l6.273-7.982a.366.366 0 0 0-.063-.51zm-4.257.006l-.479-.373a.367.367 0 0 0-.512.063L4.409 10.155a.32.32 0 0 1-.484.033l-1.383-1.041a.367.367 0 0 0-.511.063l-.478.372a.418.418 0 0 0-.063.541l2.251 2.97a.32.32 0 0 0 .484-.032l6.54-9.805a.367.367 0 0 0-.063-.51z"></path>
-                        </svg>
-                      </div>
-                    )}
+                  <div className={`bubble animate-in duration-300 ${isMe ? 'right' : 'left'}`}>
+                    <div className="text-[14.2px] break-words">
+                      {msg.text}
+                    </div>
+                    <div className="bubble-meta">
+                      <span className="bubble-time">{msg.time}</span>
+                      {isMe && (
+                        <div className="bubble-ticks">
+                          <svg viewBox="0 0 16 11" width="15" height="10" className={`tick-icon ${msg.seen ? 'seen' : ''}`} fill="currentColor">
+                            <path d="M15.01 3.316l-.478-.372a.365.365 0 0 0-.51.063L8.666 9.879a.32.32 0 0 1-.484.033l-.358-.325a.319.319 0 0 0-.484.032l-.378.483a.418.418 0 0 0 .036.541l1.32 1.266a.32.32 0 0 0 .484-.032l6.273-7.982a.366.366 0 0 0-.063-.51zm-4.257.006l-.479-.373a.367.367 0 0 0-.512.063L4.409 10.155a.32.32 0 0 1-.484.033l-1.383-1.041a.367.367 0 0 0-.511.063l-.478.372a.418.418 0 0 0-.063.541l2.251 2.97a.32.32 0 0 0 .484-.032l6.54-9.805a.367.367 0 0 0-.063-.51z"></path>
+                          </svg>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               );

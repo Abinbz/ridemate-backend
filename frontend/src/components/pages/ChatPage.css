@@ -1,14 +1,13 @@
 /* WhatsApp Style Chat Bubbles */
 .chat-container {
-    background-color: #e5ddd5;
-    background-image: url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png');
-    background-repeat: repeat;
+    background-color: #ffffff;
+    background-image: none;
 }
 
 .bubble {
-    max-width: 80%;
-    padding: 8px 12px 8px 12px;
-    border-radius: 8px;
+    max-width: 65%;
+    padding: 10px 14px;
+    border-radius: 12px;
     position: relative;
     font-size: 14.5px;
     line-height: 1.4;
@@ -31,8 +30,6 @@
 
 .bubble.right {
     background-color: #dcf8c6;
-    align-self: flex-end;
-    margin-left: 50px;
     border-top-right-radius: 0;
 }
 
@@ -46,9 +43,8 @@
 
 .bubble.left {
     background-color: #ffffff;
-    align-self: flex-start;
-    margin-right: 50px;
     border-top-left-radius: 0;
+    border: 1px solid #f0f0f0;
 }
 
 .bubble.left::before {
