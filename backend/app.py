@@ -1807,10 +1807,11 @@ def user_upload_documents():
         if not all([license_file, rc_file, insurance_file]):
             return jsonify({"success": False, "message": "All 3 documents (License, RC, Insurance) are required"}), 400
             
-        # Upload to Cloudinary with specific folders
-        license_result = cloudinary.uploader.upload(license_file, folder=f"ridemate/kyc/{user_id}/license")
-        rc_result = cloudinary.uploader.upload(rc_file, folder=f"ridemate/kyc/{user_id}/rc")
-        insurance_result = cloudinary.uploader.upload(insurance_file, folder=f"ridemate/kyc/{user_id}/insurance")
+        # Upload to Cloudinary with specific folders and unsigned preset to avoid signature issues
+        # CRITICAL: Requires 'ridemate_unsigned' preset in Cloudinary dashboard (Settings > Upload > Upload presets)
+        license_result = cloudinary.uploader.upload(license_file, folder=f"ridemate/kyc/{user_id}/license", upload_preset="ridemate_unsigned")
+        rc_result = cloudinary.uploader.upload(rc_file, folder=f"ridemate/kyc/{user_id}/rc", upload_preset="ridemate_unsigned")
+        insurance_result = cloudinary.uploader.upload(insurance_file, folder=f"ridemate/kyc/{user_id}/insurance", upload_preset="ridemate_unsigned")
         
         doc_entry = {
             "userId": ObjectId(user_id) if ObjectId.is_valid(user_id) else user_id,
