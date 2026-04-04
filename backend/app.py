@@ -414,6 +414,55 @@ def update_user():
         print(f"Update User Error: {e}")
         return jsonify({"success": False, "message": "Database error"}), 500
 
+@app.route('/api/user/add-vehicle', methods=['POST', 'OPTIONS'])
+def add_vehicle():
+    """Adds a new vehicle to the user's vehicles array."""
+    try:
+        data = safe_json()
+        user_id = data.get("userId")
+        name = data.get("name")
+        number = data.get("number")
+
+        if not user_id or not name or not number:
+            return jsonify({"success": False, "message": "Missing necessary vehicle data"}), 400
+
+        uid = ObjectId(user_id) if ObjectId.is_valid(user_id) else user_id
+        result = users_col.update_one(
+            {"_id": uid},
+            {
+                "$push": {
+                    "vehicles": {
+                        "name": name,
+                        "number": number,
+                        "addedAt": datetime.now()
+                    }
+                }
+            }
+        )
+
+        if result.matched_count == 0:
+            return jsonify({"success": False, "message": "User not found"}), 404
+
+        return jsonify({"success": True, "message": "Vehicle added successfully"}), 200
+    except Exception as e:
+        print(f"Add Vehicle Error: {e}")
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/api/user/vehicles/<user_id>', methods=['GET', 'OPTIONS'])
+def get_vehicles(user_id):
+    """Retrieves the list of vehicles for a specific user."""
+    try:
+        uid = ObjectId(user_id) if ObjectId.is_valid(user_id) else user_id
+        user = users_col.find_one({"_id": uid}, {"vehicles": 1})
+        
+        if not user:
+            return jsonify({"success": False, "message": "User not found"}), 404
+            
+        return jsonify({"success": True, "vehicles": user.get("vehicles", [])}), 200
+    except Exception as e:
+        print(f"Get Vehicles Error: {e}")
+        return jsonify({"success": False, "message": str(e)}), 500
+
 
 # --- Ride Routes ---
 @app.route("/api/post-ride", methods=["POST", "OPTIONS"])
@@ -1907,16 +1956,26 @@ def user_upload_documents():
 
         # Update MongoDB with nested document structure
         uid = ObjectId(user_id) if ObjectId.is_valid(user_id) else user_id
+        
+        update_data = {
+            f"documents.{doc_type}": {
+                "url": file_url,
+                "status": "pending",
+                "reason": "",
+                "updatedAt": datetime.now()
+            }
+        }
+        
+        # Additional field for license: licenseNumber
+        if doc_type == "license":
+            # Extract licenseNumber from payload
+            lic_num = data.get("licenseNumber")
+            if lic_num:
+                update_data["documents.license.number"] = lic_num
+
         result = users_col.update_one(
             {"_id": uid},
-            {"$set": {
-                f"documents.{doc_type}": {
-                    "url": file_url,
-                    "status": "pending",
-                    "reason": "",
-                    "updatedAt": datetime.now()
-                }
-            }}
+            {"$set": update_data}
         )
 
         if result.matched_count == 0:

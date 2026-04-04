@@ -9,160 +9,146 @@ function ProfilePage() {
   const navigate = useNavigate();
   const { showToast } = useToast();
 
-  const [licenseOpen, setLicenseOpen] = useState(false);
-  const [vehicleOpen, setVehicleOpen] = useState(false);
-
-  const [licenseData, setLicenseData] = useState({
-    licenseNumber: '',
-    licenseFile: null,
-    licenseFileName: ''
-  });
-
   const [userData, setUserData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [vehicles, setVehicles] = useState([]);
-  const [currentVehicle, setCurrentVehicle] = useState({
-    vehicleName: '',
-    rcFile: null,
-    rcFileName: '',
-    insuranceFile: null,
-    insuranceFileName: ''
-  });
+  
+  // Vehicle Management State
+  const [vehicleTab, setVehicleTab] = useState('list'); // 'list' or 'add'
+  const [vehicleList, setVehicleList] = useState([]);
+  const [newVehicle, setNewVehicle] = useState({ name: '', number: '' });
+  const [isAddingVehicle, setIsAddingVehicle] = useState(false);
+
+  // Document Upload State
+  const [licenseNumber, setLicenseNumber] = useState('');
+  const [docUrls, setDocUrls] = useState({ license: null, rc: null, insurance: null });
+  const [uploadStatus, setUploadStatus] = useState({ license: 'idle', rc: 'idle', insurance: 'idle' });
+  const [isSubmittingKYC, setIsSubmittingKYC] = useState(false);
 
   useEffect(() => {
-    const fetchUser = async () => {
-      try {
-        const userId = localStorage.getItem('userId');
-        if (!userId) {
-          navigate('/');
-          return;
-        }
-        const url = `${API_BASE_URL}/api/user/${userId}`;
-        console.log("API CALL:", url, 'GET');
-        const response = await fetch(url);
-        const data = await response.json();
-        if (response.ok && data.success) {
-          setUserData(data.user);
-        }
-      } catch (err) {
-        console.error('Failed to fetch user profile:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchUser();
-  }, [navigate]);
+    fetchProfile();
+    fetchVehicles();
+  }, []);
 
-  const handleEditProfile = () => navigate('/user/edit-profile');
-  const handleRatings = () => navigate('/user/ratings');
-
-  const handleLicenseChange = (e) => {
-    const { name, value } = e.target;
-    setLicenseData({ ...licenseData, [name]: value });
-  };
-
-  const handleLicenseFileChange = (e) => {
-    const file = e.target.files[0];
-    if (file) setLicenseData({ ...licenseData, licenseFile: file, licenseFileName: file.name });
-  };
-
-  const handleLicenseSubmit = () => {
-    if (!licenseData.licenseNumber) {
-      showToast('Please enter your license number.', 'error');
-      return;
-    }
-    showToast('License details cached. Click Submit below to verify.', 'success');
-  };
-
-  const handleVehicleChange = (e) => {
-    const { name, value } = e.target;
-    setCurrentVehicle({ ...currentVehicle, [name]: value });
-  };
-
-  const handleVehicleFileChange = (e, type) => {
-    const file = e.target.files[0];
-    if (file) {
-      if (type === 'rc') {
-        setCurrentVehicle({ ...currentVehicle, rcFile: file, rcFileName: file.name });
-      } else {
-        setCurrentVehicle({ ...currentVehicle, insuranceFile: file, insuranceFileName: file.name });
-      }
-    }
-  };
-
-  const handleAddVehicle = () => {
-    if (!currentVehicle.vehicleName) {
-      showToast('Please enter the vehicle name.', 'error');
-      return;
-    }
-    const newVehicle = { ...currentVehicle, id: Date.now() };
-    setVehicles([...vehicles, newVehicle]);
-    setCurrentVehicle({ vehicleName: '', rcFile: null, rcFileName: '', insuranceFile: null, insuranceFileName: '' });
-    showToast(`Vehicle "${newVehicle.vehicleName}" added to queue.`, 'success');
-  };
-
-  const handleRemoveVehicle = (id) => setVehicles(vehicles.filter(v => v.id !== id));
-
-  const [isSubmittingKYC, setIsSubmittingKYC] = useState(false);
-  const handleKYCSubmit = async () => {
-    if (!licenseData.licenseNumber || !licenseData.licenseFile) {
-        showToast('Please upload your license document.', 'error');
+  const fetchProfile = async () => {
+    try {
+      const userId = localStorage.getItem('userId');
+      if (!userId) {
+        navigate('/');
         return;
+      }
+      const response = await fetch(`${API_BASE_URL}/api/user/${userId}`);
+      const data = await response.json();
+      if (data.success) {
+        setUserData(data.user);
+        // Pre-fill if exists
+        if (data.user.documents?.license?.number) {
+            setLicenseNumber(data.user.documents.license.number);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch profile:', err);
+    } finally {
+      setLoading(false);
     }
-    if (vehicles.length === 0) {
-        showToast('Please add at least one vehicle with RC and Insurance.', 'error');
+  };
+
+  const fetchVehicles = async () => {
+    try {
+      const userId = localStorage.getItem('userId');
+      const response = await fetch(`${API_BASE_URL}/api/user/vehicles/${userId}`);
+      const data = await response.json();
+      if (data.success) {
+        setVehicleList(data.vehicles || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch vehicles:', err);
+    }
+  };
+
+  const handleAddVehicle = async (e) => {
+    e.preventDefault();
+    if (!newVehicle.name || !newVehicle.number) {
+      showToast('Please fill all vehicle fields.', 'error');
+      return;
+    }
+
+    setIsAddingVehicle(true);
+    try {
+      const userId = localStorage.getItem('userId');
+      const response = await fetch(`${API_BASE_URL}/api/user/add-vehicle`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId,
+          name: newVehicle.name,
+          number: newVehicle.number
+        })
+      });
+      const data = await response.json();
+      if (data.success) {
+        showToast('Vehicle added successfully!', 'success');
+        setNewVehicle({ name: '', number: '' });
+        setVehicleTab('list');
+        fetchVehicles();
+      }
+    } catch (err) {
+      showToast('Failed to add vehicle.', 'error');
+    } finally {
+      setIsAddingVehicle(false);
+    }
+  };
+
+  const handleFileUpload = async (file, type) => {
+    if (!file) return;
+    
+    setUploadStatus(prev => ({ ...prev, [type]: 'uploading' }));
+    try {
+      const url = await uploadToCloudinary(file);
+      setDocUrls(prev => ({ ...prev, [type]: url }));
+      setUploadStatus(prev => ({ ...prev, [type]: 'done' }));
+      showToast(`${type.toUpperCase()} uploaded successfully.`, 'success');
+    } catch (err) {
+      setUploadStatus(prev => ({ ...prev, [type]: 'idle' }));
+      showToast(`Failed to upload ${type}.`, 'error');
+    }
+  };
+
+  const handleKYCSubmit = async () => {
+    if (!docUrls.license || !docUrls.rc || !docUrls.insurance) {
+      showToast('Upload all documents before submitting', 'error');
+      return;
+    }
+    if (!licenseNumber) {
+        showToast('Please enter your license number.', 'error');
         return;
     }
 
     setIsSubmittingKYC(true);
     try {
-        const userId = localStorage.getItem('userId');
-        
-        // Define documents to upload: license, and first vehicle's rc/insurance
-        const kycDocs = [
-            { type: 'license', file: licenseData.licenseFile },
-            { type: 'rc', file: vehicles[0].rcFile },
-            { type: 'insurance', file: vehicles[0].insuranceFile }
-        ];
+      const userId = localStorage.getItem('userId');
+      
+      const docTypes = ['license', 'rc', 'insurance'];
+      for (const type of docTypes) {
+        const payload = {
+          userId,
+          type,
+          fileUrl: docUrls[type],
+          ...(type === 'license' && { licenseNumber })
+        };
 
-        for (const doc of kycDocs) {
-            if (!doc.file) continue;
+        await fetch(`${API_BASE_URL}/api/upload-documents`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+      }
 
-            console.log(`[Profile KYC] Uploading ${doc.type} to Cloudinary...`);
-            const fileUrl = await uploadToCloudinary(doc.file);
-            console.log(`[Profile KYC] Cloudinary URL for ${doc.type}:`, fileUrl);
-
-            // Send URL to backend
-            const fetchBody = {
-                userId: userId,
-                type: doc.type,
-                fileUrl: fileUrl
-            };
-            
-            const fetchUrl = `${API_BASE_URL}/api/upload-documents`;
-            console.log("FETCH BODY:", fetchBody);
-            console.log("API URL:", fetchUrl);
-
-            const response = await fetch(fetchUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(fetchBody)
-            });
-
-            const result = await response.json();
-            if (!result.success) {
-                throw new Error(result.message || `Mapping ${doc.type} failed`);
-            }
-            console.log(`[Profile KYC] Backend response for ${doc.type}:`, result);
-        }
-
-        showToast('Documents uploaded successfully! Monitoring system for approval.', 'success');
-        setUserData({ ...userData, isVerified: false });
-    } catch (error) {
-        console.error('[Profile KYC] Error:', error);
-        showToast(`Verification submission failed: ${error.message}`, 'error');
+      showToast('Verification submitted successfully!', 'success');
+      fetchProfile(); // Refresh verification status
+    } catch (err) {
+      showToast('Failed to submit verification.', 'error');
     } finally {
-        setIsSubmittingKYC(false);
+      setIsSubmittingKYC(false);
     }
   };
 
@@ -174,153 +160,184 @@ function ProfilePage() {
     <div className="min-h-screen bg-white pb-24">
       {/* Profile Header */}
       <div className="px-6 py-12 border-b border-gray-50 flex flex-col items-center text-center">
-        <div onClick={handleEditProfile} className="relative group cursor-pointer">
-          <div className="w-24 h-24 bg-black text-white rounded-[2rem] flex items-center justify-center text-3xl font-black mb-6 group-hover:scale-95 transition-transform uppercase">
-            {userData.username?.[0] || 'U'}
-          </div>
-          <div className="absolute -bottom-1 -right-1 bg-white border-2 border-black p-1.5 rounded-full shadow-sm">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-black" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-            </svg>
-          </div>
+        <div className="w-24 h-24 bg-black text-white rounded-[2rem] flex items-center justify-center text-3xl font-black mb-6 uppercase">
+          {userData.username?.[0] || 'U'}
         </div>
         <h1 className="text-2xl font-black text-black leading-none mb-2">{userData.username}</h1>
         <div className="flex items-center gap-2 mb-2">
-            <p className="text-[10px] font-bold text-gray-300 uppercase tracking-widest leading-none">ID: {userData.collegeId}</p>
+            <p className="text-[10px] font-bold text-gray-300 uppercase tracking-widest">ID: {userData.collegeId}</p>
             {userData.isVerified ? (
                 <span className="bg-emerald-50 text-emerald-500 text-[8px] font-black uppercase px-2 py-0.5 rounded-full">Verified</span>
             ) : (
                 <span className="bg-amber-50 text-amber-500 text-[8px] font-black uppercase px-2 py-0.5 rounded-full">KYC Pending</span>
             )}
         </div>
-
-        <div className="inline-flex items-center gap-2 mt-6 px-4 py-1.5 bg-gray-50 rounded-full cursor-pointer hover:bg-gray-100 transition-colors" onClick={handleRatings}>
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-amber-400" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M12 .587l3.668 7.568 8.332 1.151-6.064 5.828 1.48 8.279-7.416-3.967-7.417 3.967 1.481-8.279-6.064-5.828 8.332-1.151z" />
-          </svg>
-          <span className="text-[10px] font-black text-black">
-            {userData.rating ? userData.rating.toFixed(1) : 'New'} Rating
-            {userData.totalRatings > 0 && (
-              <span className="text-gray-300 font-bold ml-1 text-[9px]">({userData.totalRatings} Reviews)</span>
-            )}
-          </span>
-        </div>
       </div>
 
-      {/* Menu Section */}
-      <div className="px-6 py-12 max-w-xl mx-auto space-y-4">
-        <div className="border border-gray-100 rounded-[2.5rem] overflow-hidden">
-          {[
-            { title: 'Ride History', sub: 'Past journeys', icon: '◷', action: () => navigate('/user/ride-history') },
-            { title: 'Ratings & Reviews', sub: 'View history', icon: '★', action: handleRatings },
-            { title: 'Security', sub: 'Manage account', icon: '◈' },
-            { title: 'Help & Support', sub: 'Get assistance', icon: '?' }
-          ].map((item, i) => (
-            <button key={i} onClick={item.action} className={`w-full flex items-center justify-between p-7 hover:bg-gray-50 transition-colors ${i !== 3 ? 'border-b border-gray-50' : ''}`}>
-              <div className="flex items-center gap-6">
-                <span className="w-10 h-10 bg-gray-50 flex items-center justify-center text-sm font-black rounded-2xl">{item.icon}</span>
-                <div className="text-left">
-                  <p className="text-xs font-black text-black leading-none mb-1">{item.title}</p>
-                  <p className="text-[9px] font-bold text-gray-300 uppercase tracking-widest">{item.sub}</p>
-                </div>
-              </div>
-              <span className="text-gray-200">&rarr;</span>
-            </button>
-          ))}
-        </div>
-
-        {/* License Section */}
-        <div className="border border-gray-100 rounded-[2.5rem] overflow-hidden">
-          <button onClick={() => setLicenseOpen(!licenseOpen)} className="w-full flex items-center justify-between p-7 hover:bg-gray-50 transition-colors">
-            <div className="flex items-center gap-6">
-              <span className="w-10 h-10 bg-gray-50 flex items-center justify-center text-sm font-black rounded-2xl">L</span>
-              <div className="text-left">
-                <p className="text-xs font-black text-black leading-none mb-1">Driving License</p>
-                <p className="text-[9px] font-bold text-gray-300 uppercase tracking-widest">{licenseData.licenseNumber ? 'Draft Saved' : 'Action Required'}</p>
-              </div>
-            </div>
-            <span className={`text-gray-300 transition-transform ${licenseOpen ? 'rotate-90' : ''}`}>&rarr;</span>
-          </button>
-          {licenseOpen && (
-            <div className="px-7 pb-8 space-y-4 animate-in fade-in duration-300">
-              <input type="text" name="licenseNumber" placeholder="License Number" value={licenseData.licenseNumber} onChange={handleLicenseChange} className="w-full px-5 py-4 bg-gray-50 border border-transparent rounded-2xl text-xs font-bold focus:outline-none focus:bg-white focus:border-black transition-all" />
-              <div className="flex items-center gap-4">
-                <label className="flex-1 px-5 py-4 bg-gray-50 border border-dashed border-gray-200 rounded-2xl text-center cursor-pointer hover:border-black transition-colors">
-                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{licenseData.licenseFileName || 'Upload Image'}</span>
-                  <input type="file" hidden onChange={handleLicenseFileChange} />
-                </label>
-                <button onClick={handleLicenseSubmit} className="bg-black text-white px-8 py-4 rounded-[2rem] text-[10px] font-black uppercase tracking-[0.2em] hover:bg-gray-900 active:scale-[0.98] transition-all">Cache</button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Vehicle Section */}
-        <div className="border border-gray-100 rounded-[2.5rem] overflow-hidden">
-          <button onClick={() => setVehicleOpen(!vehicleOpen)} className="w-full flex items-center justify-between p-7 hover:bg-gray-50 transition-colors">
-            <div className="flex items-center gap-6">
-              <span className="w-10 h-10 bg-gray-50 flex items-center justify-center text-sm font-black rounded-2xl">V</span>
-              <div className="text-left">
-                <p className="text-xs font-black text-black leading-none mb-1">Add Vehicles</p>
-                <p className="text-[9px] font-bold text-gray-300 uppercase tracking-widest">{vehicles.length} In Queue</p>
-              </div>
-            </div>
-            <span className={`text-gray-300 transition-transform ${vehicleOpen ? 'rotate-90' : ''}`}>&rarr;</span>
-          </button>
-          {vehicleOpen && (
-            <div className="px-7 pb-8 space-y-6 animate-in fade-in duration-300">
-              {vehicles.map((v) => (
-                <div key={v.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl">
-                  <div>
-                    <p className="text-xs font-black text-black">{v.vehicleName}</p>
-                    <p className="text-[9px] font-bold text-emerald-500 uppercase tracking-widest">Awaiting Verification</p>
+      <div className="px-6 py-8 max-w-xl mx-auto space-y-10">
+        
+        {/* Core Menu */}
+        <section className="space-y-4">
+          <h3 className="text-[10px] font-black text-gray-300 uppercase tracking-[0.2em] px-1">Navigation Hub</h3>
+          <div className="border border-gray-100 rounded-[2.5rem] overflow-hidden">
+            {[
+              { title: 'Ride History', sub: 'Past journeys', icon: '◷', action: () => navigate('/user/ride-history') },
+              { title: 'Ratings & Reviews', sub: 'View feedback', icon: '★', action: () => navigate('/user/ratings') }
+            ].map((item, i) => (
+              <button key={i} onClick={item.action} className={`w-full flex items-center justify-between p-6 hover:bg-gray-50 transition-colors ${i === 0 ? 'border-b border-gray-50' : ''}`}>
+                <div className="flex items-center gap-5">
+                  <span className="w-10 h-10 bg-gray-50 flex items-center justify-center text-sm font-black rounded-2xl">{item.icon}</span>
+                  <div className="text-left">
+                    <p className="text-xs font-black text-black leading-none mb-1">{item.title}</p>
+                    <p className="text-[9px] font-bold text-gray-300 uppercase tracking-widest">{item.sub}</p>
                   </div>
-                  <button onClick={() => handleRemoveVehicle(v.id)} className="text-gray-200 hover:text-black transition-colors">✕</button>
                 </div>
-              ))}
-              <div className="space-y-3 pt-4 border-t border-gray-50">
-                <input name="vehicleName" placeholder="Vehicle Name" value={currentVehicle.vehicleName} onChange={handleVehicleChange} className="w-full px-5 py-4 bg-gray-50 border border-transparent rounded-2xl text-xs font-bold focus:outline-none focus:bg-white focus:border-black transition-all" />
-                <div className="grid grid-cols-2 gap-3">
-                  <label className="px-4 py-4 bg-white border border-dashed border-gray-200 rounded-2xl text-center cursor-pointer hover:border-black transition-colors">
-                    <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest leading-tight block">Upload RC</span>
-                    <input type="file" hidden onChange={(e) => handleVehicleFileChange(e, 'rc')} />
-                  </label>
-                  <label className="px-4 py-4 bg-white border border-dashed border-gray-200 rounded-2xl text-center cursor-pointer hover:border-black transition-colors">
-                    <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest leading-tight block">Insurance</span>
-                    <input type="file" hidden onChange={(e) => handleVehicleFileChange(e, 'insurance')} />
-                  </label>
-                </div>
-                <button onClick={handleAddVehicle} className="w-full bg-black text-white py-4 rounded-[2rem] text-[10px] font-black uppercase tracking-[0.2em] hover:bg-gray-900 active:scale-[0.98] transition-all">Add to Queue</button>
-              </div>
-            </div>
-          )}
-        </div>
+                <span className="text-gray-200">&rarr;</span>
+              </button>
+            ))}
+          </div>
+        </section>
 
-        {/* Global Submit KYC Button */}
-        {/* KYC Verification Link */}
-        {!userData.isVerified && (
-            <button
-                onClick={() => navigate('/user/verify')}
-                className="w-full py-6 bg-black text-white rounded-[2.5rem] text-[10px] font-black uppercase tracking-[0.2em] shadow-xl shadow-gray-100 hover:scale-[1.02] active:scale-95 transition-all text-center"
+        {/* Vehicle Management */}
+        <section className="space-y-4">
+          <h3 className="text-[10px] font-black text-gray-300 uppercase tracking-[0.2em] px-1">My Vehicles</h3>
+          <div className="bg-gray-50/50 p-2 rounded-[2rem] flex gap-2 mb-4">
+            <button 
+              onClick={() => setVehicleTab('list')}
+              className={`flex-1 py-3 text-[9px] font-black uppercase tracking-widest rounded-2xl transition-all ${vehicleTab === 'list' ? 'bg-black text-white shadow-lg' : 'text-gray-400 hover:text-black'}`}
             >
-                Verify Documents & Identity
+              Collection
             </button>
-        )}
+            <button 
+              onClick={() => setVehicleTab('add')}
+              className={`flex-1 py-3 text-[9px] font-black uppercase tracking-widest rounded-2xl transition-all ${vehicleTab === 'add' ? 'bg-black text-white shadow-lg' : 'text-gray-400 hover:text-black'}`}
+            >
+              Deploy New
+            </button>
+          </div>
 
-        {/* Reports Navigation */}
-        <button onClick={() => navigate('/user/reports')} className="w-full flex items-center justify-between p-7 border border-gray-100 rounded-[2.5rem] hover:bg-gray-50 transition-colors">
-          <div className="flex items-center gap-6">
-            <span className="w-10 h-10 bg-gray-50 flex items-center justify-center text-sm font-black rounded-2xl text-red-400">!</span>
-            <div className="text-left">
-              <p className="text-xs font-black text-black leading-none mb-1">Reports</p>
-              <p className="text-[9px] font-bold text-gray-300 uppercase tracking-widest">System notices</p>
+          {vehicleTab === 'list' ? (
+            <div className="space-y-3">
+              {vehicleList.length > 0 ? vehicleList.map((v, i) => (
+                <div key={i} className="bg-white border border-gray-100 p-5 rounded-[2rem] flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-black text-black leading-none mb-1">{v.name}</p>
+                    <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">{v.number}</p>
+                  </div>
+                  <div className="w-8 h-8 bg-gray-50 rounded-xl flex items-center justify-center text-[10px] font-bold">V</div>
+                </div>
+              )) : (
+                <div className="py-12 text-center bg-gray-50/30 rounded-[2.5rem] border border-dashed border-gray-100">
+                  <p className="text-[10px] font-bold text-gray-300 uppercase tracking-widest">No vehicles added</p>
+                </div>
+              )}
+            </div>
+          ) : (
+            <form onSubmit={handleAddVehicle} className="space-y-3 p-1">
+              <input 
+                type="text" 
+                placeholder="Vehicle Name (e.g. Swift)" 
+                value={newVehicle.name}
+                onChange={e => setNewVehicle({...newVehicle, name: e.target.value})}
+                className="w-full px-6 py-5 bg-gray-50 border border-transparent rounded-[2rem] text-xs font-bold focus:outline-none focus:bg-white focus:border-black transition-all"
+              />
+              <input 
+                type="text" 
+                placeholder="Vehicle Number (e.g. KL11AB1234)" 
+                value={newVehicle.number}
+                onChange={e => setNewVehicle({...newVehicle, number: e.target.value})}
+                className="w-full px-6 py-5 bg-gray-50 border border-transparent rounded-[2rem] text-xs font-bold focus:outline-none focus:bg-white focus:border-black transition-all"
+              />
+              <button 
+                type="submit" 
+                disabled={isAddingVehicle}
+                className="w-full py-5 bg-black text-white text-[10px] font-black uppercase tracking-[0.2em] rounded-[2rem] shadow-xl shadow-gray-200 active:scale-[0.98] transition-all disabled:bg-gray-400"
+              >
+                {isAddingVehicle ? 'Registering...' : 'Submit Vehicle'}
+              </button>
+            </form>
+          )}
+        </section>
+
+        {/* Structured Document Upload */}
+        <section className="space-y-6">
+          <div className="flex flex-col gap-1 px-1">
+            <h3 className="text-[10px] font-black text-gray-300 uppercase tracking-[0.2em]">Upload Documents</h3>
+            <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">KYC Intel Terminal</p>
+          </div>
+
+          <div className="space-y-8">
+            {/* License Section */}
+            <div className="space-y-4">
+              <label className="block text-[10px] font-black text-black uppercase tracking-widest px-1">1. Driving License</label>
+              <input 
+                type="text" 
+                placeholder="License ID Number" 
+                value={licenseNumber}
+                onChange={e => setLicenseNumber(e.target.value)}
+                className="w-full px-6 py-4 bg-gray-50 border border-transparent rounded-2xl text-xs font-bold focus:outline-none focus:bg-white focus:border-black transition-all"
+              />
+              <label className="flex items-center justify-between p-6 bg-white border border-gray-100 rounded-[2rem] cursor-pointer hover:border-black transition-all group">
+                <div className="flex items-center gap-4">
+                  <span className="text-lg">🪪</span>
+                  <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest group-hover:text-black transition-colors">
+                    {uploadStatus.license === 'done' ? '✔ Done' : uploadStatus.license === 'uploading' ? '⏳ Uploading' : 'Deploy License Image'}
+                  </p>
+                </div>
+                <input type="file" hidden onChange={e => handleFileUpload(e.target.files[0], 'license')} />
+                <div className="w-8 h-8 bg-gray-50 rounded-xl flex items-center justify-center text-gray-300 group-hover:bg-black group-hover:text-white transition-all text-xs">&uarr;</div>
+              </label>
+            </div>
+
+            {/* RC Section */}
+            <div className="space-y-4">
+              <label className="block text-[10px] font-black text-black uppercase tracking-widest px-1">2. Vehicle RC</label>
+              <label className="flex items-center justify-between p-6 bg-white border border-gray-100 rounded-[2rem] cursor-pointer hover:border-black transition-all group">
+                <div className="flex items-center gap-4">
+                  <span className="text-lg">📄</span>
+                  <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest group-hover:text-black transition-colors">
+                    {uploadStatus.rc === 'done' ? '✔ Done' : uploadStatus.rc === 'uploading' ? '⏳ Uploading' : 'Deploy RC Document'}
+                  </p>
+                </div>
+                <input type="file" hidden onChange={e => handleFileUpload(e.target.files[0], 'rc')} />
+                <div className="w-8 h-8 bg-gray-50 rounded-xl flex items-center justify-center text-gray-300 group-hover:bg-black group-hover:text-white transition-all text-xs">&uarr;</div>
+              </label>
+            </div>
+
+            {/* Insurance Section */}
+            <div className="space-y-4">
+              <label className="block text-[10px] font-black text-black uppercase tracking-widest px-1">3. Insurance Policy</label>
+              <label className="flex items-center justify-between p-6 bg-white border border-gray-100 rounded-[2rem] cursor-pointer hover:border-black transition-all group">
+                <div className="flex items-center gap-4">
+                  <span className="text-lg">🛡️</span>
+                  <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest group-hover:text-black transition-colors">
+                    {uploadStatus.insurance === 'done' ? '✔ Done' : uploadStatus.insurance === 'uploading' ? '⏳ Uploading' : 'Deploy Insurance Intel'}
+                  </p>
+                </div>
+                <input type="file" hidden onChange={e => handleFileUpload(e.target.files[0], 'insurance')} />
+                <div className="w-8 h-8 bg-gray-50 rounded-xl flex items-center justify-center text-gray-300 group-hover:bg-black group-hover:text-white transition-all text-xs">&uarr;</div>
+              </label>
             </div>
           </div>
-          <span className="text-gray-200">&rarr;</span>
-        </button>
 
-        {/* Logout */}
-        <button onClick={() => { localStorage.clear(); navigate('/'); }} className="w-full py-6 mt-8 border border-black rounded-[2.5rem] text-[10px] font-black uppercase tracking-[0.2em] hover:bg-black hover:text-white transition-all text-black">Logout</button>
+          <button 
+            onClick={handleKYCSubmit}
+            disabled={isSubmittingKYC}
+            className="w-full py-6 bg-black text-white text-[11px] font-black uppercase tracking-[0.3em] rounded-[2.5rem] shadow-2xl shadow-gray-200 active:scale-[0.98] transition-all disabled:bg-gray-400 mt-6"
+          >
+            {isSubmittingKYC ? 'Finalizing Intel...' : 'Submit for Verification'}
+          </button>
+        </section>
+
+        {/* Bottom Actions */}
+        <div className="pt-10 border-t border-gray-50">
+            <button 
+                onClick={() => { localStorage.clear(); navigate('/'); }} 
+                className="w-full py-6 border border-black rounded-[2.5rem] text-[10px] font-black uppercase tracking-[0.2em] text-black hover:bg-black hover:text-white transition-all active:scale-95 shadow-sm"
+            >
+                Log out
+            </button>
+        </div>
       </div>
     </div>
   );
