@@ -89,10 +89,10 @@ const AdminVerificationPage = () => {
             return;
         }
 
-        // Validation: Promote only works if ALL are approved
+        // Logic check: Promote as driver only if all are approved
         const allApproved = Object.values(userDecision.documents).every(doc => doc.status === 'approved');
         if (userDecision.promoteToDriver && !allApproved) {
-            setMessage({ text: 'Users can only be promoted if all documents are approved', type: 'error' });
+            setMessage({ text: 'Promote as Driver is only allowed if ALL documents are approved', type: 'error' });
             return;
         }
 
@@ -110,15 +110,14 @@ const AdminVerificationPage = () => {
 
             const data = await response.json();
             if (data.success) {
-                // Part 1: Refresh data and show toast
-                setMessage({ text: 'Decision finalized successfully', type: 'success' });
+                setMessage({ text: 'Decision finalized for user', type: 'success' });
                 
-                // Part 4: Optimistic UI - Remove user from list and refetch
+                // Part 6: Auto-refresh administration list instantly
                 setVerifications(prev => prev.filter(v => v.userId !== userId));
                 setExpandedUser(null);
-                
-                // Full sync to ensure server state matches local
-                await fetchVerifications();
+
+                // Toast cleanup after 3s
+                setTimeout(() => setMessage({ text: '', type: '' }), 3000);
             } else {
                 throw new Error(data.message);
             }

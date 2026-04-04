@@ -88,12 +88,13 @@ function PostPage() {
             
             if (data.success) {
                 setUserData(data.user);
-                const userRoles = data.user.roles || [];
-                const isDriver = userRoles.includes("driver");
+                
+                // Part 4.5: Role-Based Access + Banned check
+                const isDriver = data.user.role === "user+driver";
+                const isBanned = data.user.isBanned;
 
-                if (!isDriver) {
-                    // Part 4: Show alert for non-drivers
-                    console.log("🔒 Access Blocked: User not in Driver Role.");
+                if (!isDriver || isBanned) {
+                    console.log("🔒 Access Blocked: User restricted or unverified.");
                 }
             }
         } catch (error) {
@@ -264,9 +265,9 @@ function PostPage() {
     }
   };
 
-  // Part 4: Frontend - Lock Offer Ride
-  const userRoles = userData?.roles || [];
-  const isDriver = userRoles.includes("driver");
+  // Part 4.5: Frontend - Role-Based Control
+  const isDriver = userData?.role === "user+driver";
+  const isBanned = userData?.isBanned;
 
   return (
     <div className="min-h-screen bg-white">
@@ -276,14 +277,27 @@ function PostPage() {
           <p className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.4em]">Strategic Route Deployment</p>
         </header>
 
+        {/* Banned Alert */}
+        {isBanned && (
+          <div className="bg-black p-8 rounded-[2.5rem] text-white flex flex-col items-center text-center gap-4 mb-10">
+            <div className="w-16 h-16 bg-red-600 rounded-3xl flex items-center justify-center text-2xl animate-pulse">🚫</div>
+            <div className="space-y-1">
+              <p className="text-sm font-black uppercase tracking-tight text-red-500">Account Restricted</p>
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest max-w-[400px]">
+                Reason: {userData.banReason || "Policy Violation Detail Pending"}
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Locked UI for non-drivers */}
-        {!isDriver && (
+        {!isDriver && !isBanned && (
           <div className="bg-red-50 p-8 rounded-[2.5rem] border border-red-100 flex flex-col items-center text-center gap-4 mb-20 animate-in fade-in zoom-in duration-500">
             <div className="w-16 h-16 bg-white rounded-3xl flex items-center justify-center text-2xl shadow-sm">🔒</div>
             <div className="space-y-1">
               <p className="text-sm font-black text-black uppercase tracking-tight">Security Lockdown</p>
               <p className="text-[10px] font-bold text-red-600 uppercase tracking-widest max-w-[280px]">
-                You must complete your document verification to offer rides on this platform.
+                You must be verified as a driver to access this tactical deployment zone.
               </p>
             </div>
           </div>
@@ -519,11 +533,11 @@ function PostPage() {
 
                 <button
                   type="submit"
-                  disabled={loading || !isDriver}
+                  disabled={loading || !isDriver || isBanned}
                   className={`w-full py-6 rounded-[2rem] text-[11px] font-black uppercase tracking-[0.3em] transition-all flex items-center justify-center gap-3
-                    ${loading || !isDriver ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-black text-white shadow-2xl shadow-gray-200 active:scale-[0.98]'}`}
+                    ${loading || !isDriver || isBanned ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-black text-white shadow-2xl shadow-gray-200 active:scale-[0.98]'}`}
                 >
-                  {loading ? 'Initializing Route...' : isDriver ? 'Post Ride' : 'Verification Required'}
+                  {loading ? 'Initializing Route...' : isBanned ? 'Access Denied' : isDriver ? 'Post Ride' : 'Verification Required'}
                 </button>
         </form>
       </div>

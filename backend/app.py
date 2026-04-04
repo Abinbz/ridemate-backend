@@ -270,6 +270,15 @@ def signup():
         # Security: Hash the password before saving (Production-mode)
         hashed_password = generate_password_hash(data['password'])
 
+        # Part 4.5: Check for banned users
+        user = users_col.find_one({"username": data['username']})
+        if user and user.get("isBanned"):
+            print(f"DEBUG: Login blocked for banned user: {data['username']}")
+            return jsonify({
+                "success": False, 
+                "message": f"Your account has been restricted. Reason: {user.get('banReason', 'No reason provided')}"
+            }), 403
+
         # Construct User Document
         user_doc = {
             "name": data['name'],
@@ -281,7 +290,8 @@ def signup():
             "password": hashed_password, 
             "role": "user",
             "isVerified": False,
-            "isBlocked": False,
+            "isBanned": False,
+            "banReason": "",
             "rating": 0
         }
         
@@ -474,17 +484,21 @@ def post_ride():
         return jsonify({"success": False, "message": "Missing route details"}), 400
         
     try:
-        # Strict Eligibility Check: Must have the "driver" role
+        # Strict Eligibility Check: Must have the "user+driver" role
         user = users_col.find_one({"_id": ObjectId(user_id)})
         
-        # User requested fix: Use roles system
-        roles = user.get("roles", [])
-        if "driver" not in roles:
-             # Part 4: Add console log for blocked ride
-             print(f"[RIDE BLOCKED] User not driver: {user_id}")
+        # Part 4.5: Role-Based Access + Banned check
+        if user.get("isBanned"):
+            print(f"[RIDE BLOCKED] Banned user: {user_id}")
+            return jsonify({"success": False, "message": "Your account is restricted from posting rides."}), 403
+
+        role = user.get("role", "user")
+        if role != "user+driver":
+             # Unauthorized attempt logging
+             print(f"[RIDE BLOCKED] User not verified driver: {user_id}")
              return jsonify({
                  "success": False, 
-                 "message": "You are not authorized to post rides. Complete verification to become a driver."
+                 "message": "You must be verified as a driver to offer rides. Complete your profile verification."
              }), 403
 
         # User requested standardization and logging
@@ -1615,16 +1629,27 @@ def verify_user_decision():
             update_data[f"documents.{doc_type}.updatedAt"] = datetime.now()
 
         # Calculate overall verification status
-        # Note: A user is "verified" only if ALL uploaded documents are approved
         uploaded_docs = [doc for doc in documents.values() if doc.get("url")]
         if uploaded_docs:
             all_approved = all(doc.get("status") == "approved" for doc in uploaded_docs)
-            overall_status = "verified" if all_approved else "rejected"
+            overall_status = "approved" if all_approved else "rejected"
         else:
             overall_status = "pending"
 
         update_data["verificationStatus"] = overall_status
-        update_data["isVerified"] = (overall_status == "verified")
+        update_data["isVerified"] = (overall_status == "approved")
+
+        # Part 1: Logic Synchronization with Phase 4.5 Requirements
+        # If all docs are approved AND "Promote as Driver" is checked
+        final_role = "user"
+        if overall_status == "approved":
+            if promote:
+                final_role = "user+driver"
+            else:
+                # Role remains user if not promoted
+                final_role = "user"
+
+        update_data["role"] = final_role
 
         # 1. Update the database using dot notation to prevent overwriting whole 'documents' object
         users_col.update_one(
@@ -1633,59 +1658,25 @@ def verify_user_decision():
         )
 
         # Part 5: Add console log after update
-        print(f"[ADMIN] Verification updated for: {user_id}")
-
-        # 2. Strict Driver Promotion Check
-        license_doc = documents.get("license", {})
-        rc_doc = documents.get("rc", {})
-        insurance_doc = documents.get("insurance", {})
-
-        can_be_driver = (
-            license_doc.get("status") == "approved" and
-            rc_doc.get("status") == "approved" and
-            insurance_doc.get("status") == "approved"
-        )
-
-        # Promote to driver if requested and eligible
-        if promote:
-            if not can_be_driver:
-                return jsonify({
-                    "success": False,
-                    "message": "Strict Eligibility Failed: All 3 documents (License, RC, Insurance) must be approved to promote as a driver."
-                }), 400
-
-            # User requested fix: Implement roles + driver control
-            users_col.update_one(
-                {"_id": ObjectId(user_id)},
-                {
-                    "$addToSet": { "roles": "driver" },
-                    "$set": { "isDriver": True }
-                }
-            )
+        print(f"[ADMIN] Decision Finalized for: {user_id} - Role: {final_role} - Status: {overall_status}")
 
         # Construct notification message
-        status_text = "approved" if overall_status == "verified" else "rejected"
-        notification_msg = f"Your verification documents have been {status_text}."
+        notification_msg = "Your documents have been approved!" if overall_status == "approved" else "Some of your documents were rejected."
         
         if overall_status == "rejected":
             reasons = [f"{k.upper()}: {v.get('reason')}" for k, v in documents.items() if v.get('status') == 'rejected']
             if reasons:
-                notification_msg += " Reasons: " + ", ".join(reasons)
+                notification_msg = "Your document was rejected: " + ", ".join(reasons)
 
         # Create system notification
         notifications_col.insert_one({
             "userId": user_id,
-            "type": "document",
+            "type": "verification",
             "title": f"Verification {overall_status.capitalize()}",
             "message": notification_msg,
             "isRead": False,
             "createdAt": datetime.now()
         })
-
-        # Send push notification
-        send_push_notification(user_id, f"Verification {overall_status.capitalize()}", notification_msg, {"type": "document"})
-
-        return jsonify({"success": True, "message": f"Verification decision set to {overall_status}"}), 200
     except Exception as e:
         print(f"Admin Verify User Error: {e}")
         return jsonify({"success": False, "message": "Database error"}), 500
@@ -2138,6 +2129,29 @@ def user_upload_documents():
         # Part 7: FULL ERROR HANDLER
         print("🔥 ERROR IN UPLOAD:", str(e))
         return jsonify({"error": str(e)}), 500
+
+@app.route("/api/notifications/<user_id>", methods=["GET", "OPTIONS"])
+def get_notifications(user_id):
+    """Retrieves all notifications for a specific user, sorted by recency."""
+    try:
+        notifications = list(notifications_col.find({"userId": user_id}).sort("createdAt", -1))
+        return jsonify({"success": True, "notifications": parse_json(notifications)}), 200
+    except Exception as e:
+        print(f"Get Notifications Error: {e}")
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route("/api/notifications/read/<notif_id>", methods=["POST", "OPTIONS"])
+def mark_notification_read(notif_id):
+    """Marks a specific notification as read."""
+    try:
+        notifications_col.update_one(
+            {"_id": ObjectId(notif_id)},
+            {"$set": {"isRead": True}}
+        )
+        return jsonify({"success": True, "message": "Notification marked as read"}), 200
+    except Exception as e:
+        print(f"Mark Notification Read Error: {e}")
+        return jsonify({"success": False, "message": str(e)}), 500
 
 @app.route("/api/upload", methods=["POST", "OPTIONS"])
 def upload_file():

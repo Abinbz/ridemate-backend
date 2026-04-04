@@ -303,61 +303,57 @@ function ProfilePage() {
             )}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {[
               { id: 'license', label: 'Driving License', icon: '🪪' },
               { id: 'rc', label: 'Vehicle RC', icon: '📄' },
               { id: 'insurance', label: 'Insurance Policy', icon: '🛡️' }
-            ].map((doc) => {
+            ]
+            .filter(doc => userData.documents?.[doc.id]?.url) // Hide empty documents
+            .map((doc) => {
               const savedDoc = userData.documents?.[doc.id];
               return (
-                <div key={doc.id} className="bg-white border border-gray-100 rounded-[2rem] p-4 flex flex-col gap-4 shadow-sm hover:shadow-md transition-all">
+                <div key={doc.id} className="bg-white border rounded-[2.5rem] p-6 flex flex-col gap-5 shadow-sm hover:shadow-xl transition-all duration-500 group/card">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <span className="text-sm">{doc.icon}</span>
-                      <p className="text-[9px] font-black text-black uppercase tracking-tight">{doc.label}</p>
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 bg-gray-50 rounded-2xl flex items-center justify-center text-lg group-hover/card:scale-110 transition-transform">
+                        {doc.icon}
+                      </div>
+                      <p className="text-[10px] font-black text-black uppercase tracking-widest">{doc.label}</p>
                     </div>
-                    {savedDoc && (
-                      <span className={`text-[7px] font-black uppercase px-2 py-0.5 rounded-full flex items-center gap-1 ${
-                        savedDoc.status === 'approved' ? 'bg-emerald-50 text-emerald-500' :
-                        savedDoc.status === 'rejected' ? 'bg-red-50 text-red-500' : 'bg-amber-50 text-amber-500'
-                      }`}>
-                        {savedDoc.status === 'approved' ? '✔' : savedDoc.status === 'rejected' ? '❌' : '⏳'}
-                        {savedDoc.status || 'Pending'}
-                      </span>
-                    )}
+                    <span className={`text-[8px] font-black uppercase px-4 py-2 rounded-full border flex items-center gap-2 ${
+                      savedDoc.status === 'approved' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
+                      savedDoc.status === 'rejected' ? 'bg-red-50 text-red-600 border-red-100' : 'bg-amber-50 text-amber-600 border-amber-100'
+                    }`}>
+                      {savedDoc.status === 'approved' ? '✔ Verified' : 
+                       savedDoc.status === 'rejected' ? '❌ Rejected' : '⏳ Pending'}
+                    </span>
                   </div>
 
-                  {savedDoc?.url ? (
-                    <div className="relative group aspect-square rounded-[1.5rem] overflow-hidden bg-gray-50 border border-gray-100">
-                      <img src={savedDoc.url} alt={doc.label} className="w-full h-full object-cover" />
-                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center p-4">
-                        <button 
-                          onClick={() => window.open(savedDoc.url, '_blank')}
-                          className="bg-white text-black px-4 py-2 rounded-full text-[8px] font-black uppercase tracking-widest"
-                        >
-                          Show Full Rez
-                        </button>
-                      </div>
+                  <div className="relative group aspect-video rounded-[2rem] overflow-hidden bg-gray-50 border border-gray-50">
+                    <img src={savedDoc.url} alt={doc.label} className="w-full h-full object-cover grayscale-[0.5] group-hover:grayscale-0 transition-all duration-700" />
+                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-all duration-500 flex items-center justify-center backdrop-blur-[2px]">
+                      <button 
+                        onClick={() => window.open(savedDoc.url, '_blank')}
+                        className="bg-white text-black px-8 py-3 rounded-full text-[10px] font-black uppercase tracking-[0.2em] transform translate-y-4 group-hover:translate-y-0 transition-transform shadow-2xl"
+                      >
+                        Inspect Asset
+                      </button>
                     </div>
-                  ) : (
-                    <div className="aspect-square rounded-[1.5rem] border-2 border-dashed border-gray-50 flex flex-col items-center justify-center bg-gray-50/30 text-center px-4">
-                      <p className="text-[8px] font-black text-gray-300 uppercase tracking-widest leading-none">NO DATA FOUND</p>
+                  </div>
+
+                  {(doc.id === 'license' && savedDoc?.number) && (
+                    <div className="bg-gray-50 px-4 py-3 rounded-2xl">
+                      <p className="text-[7px] font-bold text-gray-400 uppercase tracking-widest mb-1">LICENSE ID</p>
+                      <p className="text-[10px] font-black text-black uppercase tracking-tight">{savedDoc.number}</p>
                     </div>
                   )}
 
-                  {/* Phase 3: Rejection Reason Display */}
-                  {savedDoc?.status === 'rejected' && savedDoc?.reason && (
-                    <div className="bg-red-50 p-3 rounded-2xl border border-red-100">
-                       <p className="text-[7px] font-bold text-red-400 uppercase tracking-widest leading-none mb-1">Moderator Intel</p>
-                       <p className="text-[9px] font-black text-red-600 uppercase tracking-tight leading-relaxed">{savedDoc.reason}</p>
-                    </div>
-                  )}
-
-                  {doc.id === 'license' && savedDoc?.number && (
-                    <div className="bg-gray-50 px-3 py-2 rounded-xl">
-                      <p className="text-[7px] font-bold text-gray-400 uppercase tracking-widest leading-none mb-1">LICENSE ID</p>
-                      <p className="text-[9px] font-black text-black uppercase tracking-tight">{savedDoc.number}</p>
+                  {savedDoc.status === 'rejected' && savedDoc.reason && (
+                    <div className="bg-red-50/50 p-4 rounded-2xl border border-red-100 animate-in slide-in-from-top-2 duration-300">
+                      <p className="text-[9px] font-bold text-red-600 uppercase tracking-tight leading-relaxed">
+                        Moderator Note: {savedDoc.reason}
+                      </p>
                     </div>
                   )}
                 </div>

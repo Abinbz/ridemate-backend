@@ -103,13 +103,42 @@ const AdminUsersPage = () => {
                                 </div>
                             </div>
 
-                            <div className="mt-2 pt-4 border-t border-gray-50 flex gap-2">
-                                <button className="flex-1 py-2.5 rounded-xl border border-black text-[9px] font-black uppercase tracking-widest hover:bg-black hover:text-white transition-all">
-                                    Edit Roles
-                                </button>
-                                <button className="flex-1 py-2.5 rounded-xl bg-gray-50 text-[9px] font-black uppercase tracking-widest hover:bg-red-50 hover:text-red-600 transition-all">
-                                    Restrict
-                                </button>
+                            <div className="mt-2 pt-4 border-t border-gray-50 flex flex-col gap-3">
+                                {/* Role Control */}
+                                <div className="flex gap-2">
+                                    <select 
+                                        value={user.role || 'user'}
+                                        onChange={(e) => handleUpdateStatus(user.id, { role: e.target.value })}
+                                        className="flex-1 bg-gray-50 border-none rounded-xl px-4 py-2 text-[9px] font-black uppercase tracking-widest focus:ring-1 ring-black transition-all appearance-none cursor-pointer"
+                                    >
+                                        <option value="user">👤 User</option>
+                                        <option value="user+driver">🏎️ Driver</option>
+                                        <option value="admin">🛡️ Admin</option>
+                                    </select>
+
+                                    <button 
+                                        onClick={() => handleUpdateStatus(user.id, { isBanned: !user.isBanned, banReason: user.isBanned ? "" : "Policy Violation" })}
+                                        className={`flex-1 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${
+                                            user.isBanned 
+                                            ? 'bg-emerald-50 text-emerald-600 border border-emerald-100 hover:bg-emerald-100' 
+                                            : 'bg-red-50 text-red-600 border border-red-100 hover:bg-red-100'
+                                        }`}
+                                    >
+                                        {user.isBanned ? '✅ UNBAN' : '🚫 BAN'}
+                                    </button>
+                                </div>
+
+                                {user.isBanned && (
+                                    <div className="animate-in slide-in-from-top-2 duration-300">
+                                        <input 
+                                            type="text"
+                                            placeholder="REASON FOR BAN..."
+                                            defaultValue={user.banReason || ""}
+                                            onBlur={(e) => handleUpdateStatus(user.id, { banReason: e.target.value })}
+                                            className="w-full bg-red-50/30 border border-red-100 rounded-xl px-4 py-2 text-[9px] font-bold text-red-600 uppercase tracking-tight outline-none focus:ring-2 ring-red-100"
+                                        />
+                                    </div>
+                                )}
                             </div>
                         </div>
                     ))
@@ -121,6 +150,23 @@ const AdminUsersPage = () => {
             </div>
         </div>
     );
+};
+
+// ... existing helper logic ...
+const handleUpdateStatus = async (userId, payload) => {
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/admin/update-user-status`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId, ...payload })
+        });
+        const data = await response.json();
+        if (data.success) {
+            window.location.reload(); // Simple refresh for now to sync all states
+        }
+    } catch (error) {
+        console.error('Update status error:', error);
+    }
 };
 
 export default AdminUsersPage;

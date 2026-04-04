@@ -21,6 +21,7 @@ import AdminRideDetailsPage from './components/pages/AdminRideDetailsPage';
 import AdminVerificationPage from './components/pages/AdminVerificationPage';
 import AdminReportsPage from './components/pages/AdminReportsPage';
 import UserVerificationPage from './components/pages/UserVerificationPage';
+import NotificationsPage from './components/pages/NotificationsPage';
 import { ToastProvider, useToast } from './context/ToastContext';
 import { Navigate } from 'react-router-dom';
 
@@ -112,6 +113,7 @@ function AppContent() {
           <Route path="/user/my-rides/details" element={<MyRideDetailsPage />} />
           <Route path="/user/ride-history" element={<RideHistoryPage />} />
           <Route path="/user/verify" element={<UserVerificationPage />} />
+          <Route path="/user/notifications" element={<NotificationsPage />} />
           <Route path="/map-picker" element={<MapPicker />} />
 
           {/* Admin Routes */}
