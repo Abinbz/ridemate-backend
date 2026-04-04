@@ -1558,10 +1558,16 @@ def admin_get_users():
 @app.route('/api/admin/verifications', methods=['GET', 'OPTIONS'])
 def get_verifications():
     try:
-        # Find users who have at least a license URL uploaded
-        users_list = list(users_col.find({
-            "documents.license.url": {"$exists": True}
-        }))
+        # User requested fix: Fetch all users where ANY document has status "pending"
+        query = {
+            "$or": [
+                { "documents.license.status": "pending" },
+                { "documents.rc.status": "pending" },
+                { "documents.insurance.status": "pending" }
+            ]
+        }
+        
+        users_list = list(users_col.find(query))
 
         result = []
         for user in users_list:
@@ -1569,11 +1575,12 @@ def get_verifications():
             result.append({
                 "userId": user["_id"],
                 "username": user.get("username"),
-                "collegeId": user.get("collegeId"),
+                "email": user.get("email"),
                 "documents": user.get("documents", {}),
                 "verificationStatus": user.get("verificationStatus", "pending")
             })
 
+        print(f"[ADMIN] Pending verification users: {len(result)}")
         return jsonify({"success": True, "verifications": result}), 200
     except Exception as e:
         print(f"Admin Get Verifications Error: {e}")
