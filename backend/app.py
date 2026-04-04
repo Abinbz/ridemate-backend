@@ -1685,6 +1685,50 @@ def verify_user_decision():
         print(f"Admin Verify User Error: {e}")
         return jsonify({"success": False, "message": "Database error"}), 500
 
+@app.route('/api/admin/update-user-status', methods=['POST', 'OPTIONS'])
+def update_user_status():
+    """Administrative management route for roles and bans."""
+    if request.method == 'OPTIONS':
+        return jsonify({"success": True}), 200
+        
+    try:
+        data = safe_json()
+        print("📦 Admin Update User Status data:", data)
+
+        user_id = data.get('userId')
+        role = data.get('role')
+        is_banned = data.get('isBanned')
+        ban_reason = data.get('banReason', '')
+
+        if not user_id:
+            return jsonify({"success": False, "message": "Missing userId"}), 400
+
+        update_fields = {}
+        if role:
+            update_fields['role'] = role
+
+        if is_banned is not None:
+            update_fields['isBanned'] = is_banned
+            update_fields['banReason'] = ban_reason if is_banned else ""
+
+        if not update_fields:
+            return jsonify({"success": False, "message": "No updates provided"}), 400
+
+        result = users_col.update_one(
+            {"_id": ObjectId(user_id)},
+            {"$set": update_fields}
+        )
+
+        if result.matched_count == 0:
+            return jsonify({"success": False, "message": "User not found"}), 404
+
+        print(f"[ADMIN] User status updated: {user_id} - {update_fields}")
+        return jsonify({"success": True, "message": "User status updated successfully"}), 200
+
+    except Exception as e:
+        print("ADMIN UPDATE ERROR:", e)
+        return jsonify({"success": False, "error": str(e)}), 500
+
 @app.route("/api/admin/block-user", methods=["POST", "OPTIONS"])
 def admin_block_user():
     data = safe_json()
