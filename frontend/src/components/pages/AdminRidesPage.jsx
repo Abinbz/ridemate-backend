@@ -30,10 +30,10 @@ const AdminRidesPage = () => {
 
     const getStatusStyle = (status) => {
         switch (status) {
-            case 'Completed': return 'bg-emerald-500 text-white';
-            case 'Ongoing': return 'bg-blue-500 text-white';
-            case 'Scheduled': return 'bg-amber-500 text-white';
-            case 'Cancelled': return 'bg-red-500 text-white';
+            case 'completed': return 'bg-emerald-500 text-white';
+            case 'ongoing': return 'bg-blue-500 text-white';
+            case 'accepted': return 'bg-amber-500 text-white';
+            case 'cancelled': return 'bg-red-500 text-white';
             default: return 'bg-gray-100 text-gray-400';
         }
     };
@@ -67,7 +67,7 @@ const AdminRidesPage = () => {
                                     <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest leading-none">Fleet Commander</p>
                                 </div>
                                 <span className={`text-[8px] font-black uppercase tracking-widest px-3 py-1.5 rounded-full shadow-sm shadow-gray-200 ${getStatusStyle(ride.status)}`}>
-                                    {ride.status || 'Scheduled'}
+                                    {ride.status || 'accepted'}
                                 </span>
                             </div>
 
@@ -96,18 +96,24 @@ const AdminRidesPage = () => {
                                 </div>
                                 <div className="flex items-center gap-2">
                                     <div className="flex -space-x-2">
-                                        {(ride.bookedUsers || []).map((_, i) => (
-                                            <div key={i} className="w-7 h-7 rounded-full bg-white border-2 border-white shadow-sm overflow-hidden flex items-center justify-center text-[10px] bg-black text-white font-black">
-                                                P
+                                        {(ride.passengers || ride.passengerDetails || []).map((p, i) => (
+                                            <div 
+                                              key={i} 
+                                              title={`${p.name} - ${p.joined ? 'Joined' : 'Not Joined'}`}
+                                              className={`w-7 h-7 rounded-full border-2 border-white shadow-sm overflow-hidden flex items-center justify-center text-[10px] font-black ${
+                                                p.joined ? 'bg-emerald-500 text-white' : 'bg-gray-200 text-gray-400'
+                                              }`}
+                                            >
+                                                {(p.name || 'P')[0].toUpperCase()}
                                             </div>
                                         ))}
-                                        { (ride.bookedUsers || []).length === 0 && (
+                                        {(ride.passengers || ride.passengerDetails || []).length === 0 && (
                                             <p className="text-[9px] font-bold text-gray-300 uppercase tracking-widest">Lone Voyager</p>
                                         )}
                                     </div>
-                                    { (ride.bookedUsers || []).length > 0 && (
+                                    {(ride.passengers || ride.passengerDetails || []).length > 0 && (
                                         <p className="text-[9px] font-black text-black ml-1 uppercase tracking-widest">
-                                            {(ride.bookedUsers || []).length} Units
+                                            {(ride.passengers || ride.passengerDetails || []).length} Units
                                         </p>
                                     )}
                                 </div>

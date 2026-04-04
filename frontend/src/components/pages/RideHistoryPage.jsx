@@ -34,10 +34,23 @@ const RideCard = ({ ride, onClick }) => (
       </p>
     </div>
 
+    {/* Participation Summary (NEW) */}
+    <div className="bg-gray-50/50 rounded-2xl p-4 flex items-center justify-between border border-gray-100">
+      <div className="flex items-center gap-2">
+        <span className="text-[10px]">👥</span>
+        <p className="text-[9px] font-black text-black uppercase tracking-widest">
+          {ride.passengers?.length || 0} Passengers
+        </p>
+      </div>
+      <p className="text-[8px] font-black text-emerald-600 uppercase tracking-widest">
+        {ride.passengers?.filter(p => p.joined).length || 0} Joined
+      </p>
+    </div>
+
     {/* Vehicle Info */}
-    <div className="pt-4 border-t border-gray-50 flex items-center justify-between">
+    <div className="pt-2 flex items-center justify-between">
       <div className="flex items-center gap-3">
-        <div className="w-8 h-8 bg-gray-50 rounded-xl flex items-center justify-center text-[10px] font-black text-black">
+        <div className="w-8 h-8 bg-black rounded-xl flex items-center justify-center text-[10px] font-black text-white">
           {(ride.vehicle || ride.vehicleType || 'V').split(' ')[0][0]}
         </div>
         <p className="text-[10px] font-black text-black uppercase tracking-widest">

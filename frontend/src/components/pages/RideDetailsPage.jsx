@@ -61,7 +61,7 @@ function RideDetailsPage() {
       return;
     }
 
-    if (ride.status !== 'upcoming') {
+    if (ride.status !== 'accepted') {
       showToast('This ride has already started or is completed.', 'error');
       return;
     }
@@ -110,7 +110,7 @@ function RideDetailsPage() {
   const isJoined = ride.bookedUsers?.includes(userId);
   const isDriver = (ride.driverId || ride.createdBy) === userId;
   const isBanned = userData?.isBanned;
-  const canJoin = (ride.status === 'upcoming') && !isJoined && !isDriver && !isBanned;
+  const canJoin = (ride.status === 'accepted') && !isJoined && !isDriver && !isBanned;
 
   return (
     <div className="min-h-screen bg-white pb-32">
@@ -124,7 +124,7 @@ function RideDetailsPage() {
         <div className="flex flex-col">
           <h1 className="text-sm font-black text-black uppercase tracking-widest leading-none">Ride Details</h1>
           <span className="text-[8px] font-black uppercase text-amber-500 tracking-widest mt-0.5">
-            {ride?.status?.toString() || "upcoming"}
+            {ride?.status?.toString() || "accepted"}
           </span>
         </div>
       </div>
@@ -226,6 +226,39 @@ function RideDetailsPage() {
             <p className="text-[10px] font-black text-black uppercase tracking-widest">
               Duration: <span className="text-gray-400">{ride?.duration || "Variable"}</span> | Capacity: <span className="text-gray-400">{ride?.passengers || 0} Seats</span>
             </p>
+          </div>
+        </section>
+
+        {/* ── Passenger Manifest (NEW) ── */}
+        <section className="space-y-6">
+          <div className="flex items-center justify-between border-b border-gray-50 pb-2">
+            <h3 className="text-[10px] font-black text-black uppercase tracking-widest">Passenger Manifest</h3>
+            <span className="text-[8px] font-black text-gray-300 uppercase tracking-widest">{ride.passengers?.length || 0} Joined</span>
+          </div>
+          
+          <div className="grid grid-cols-1 gap-3">
+            {(ride.passengers || []).length > 0 ? (
+              ride.passengers.map((p, idx) => (
+                <div key={idx} className="flex items-center justify-between bg-gray-50/50 p-4 rounded-2xl border border-gray-50">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 bg-black rounded-lg flex items-center justify-center text-[9px] font-black text-white">
+                      {p.avatar || (p.name || 'P')[0].toUpperCase()}
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-black text-black uppercase tracking-tight">{p.name}</p>
+                      <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">{p.collegeId || 'ID Verified'}</p>
+                    </div>
+                  </div>
+                  <span className={`text-[7px] font-black uppercase px-3 py-1 rounded-full border ${
+                    p.joined ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-white text-gray-300 border-gray-100'
+                  }`}>
+                    {p.joined ? 'Boarded' : 'Reserved'}
+                  </span>
+                </div>
+              ))
+            ) : (
+              <p className="text-[9px] font-bold text-gray-300 uppercase tracking-widest text-center py-4 italic">No passengers have joined yet.</p>
+            )}
           </div>
         </section>
 

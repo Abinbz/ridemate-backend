@@ -130,8 +130,8 @@ function SearchPage() {
         if (response.ok && data.success) {
           // Flatten upcoming posted and booked rides for a quick glance
           const allUpcoming = [
-            ...(data.posted.upcoming || []),
-            ...(data.booked.upcoming || [])
+            ...(data.posted.accepted || []),
+            ...(data.booked.accepted || [])
           ].slice(0, 5); // Limit to 5 for home preview
           setUpcomingRides(allUpcoming);
         }

@@ -165,26 +165,45 @@ function MyRideDetailsPage() {
   };
 
   const handleFinishRide = async () => {
-    const rideId = ride.id || ride._id;
     try {
-      console.log("API CALL:", `${API_BASE_URL}/api/end-ride`);
       const response = await fetch(`${API_BASE_URL}/api/end-ride`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rideId, userId: currentUserId })
+        body: JSON.stringify({ rideId: ride.id || ride._id, userId })
       });
       const data = await response.json();
-      if (response.ok && data.success) {
-        showToast("Ride completed!", "success");
+      if (data.success) {
+        showToast('Ride finished successfully!', 'success');
         await fetchRide();
       } else {
-        showToast(data.message || "Failed to finish ride", "error");
+        showToast(data.message || 'Failed to finish ride', 'error');
       }
     } catch (err) {
-      showToast(`Connection error: ${err.message}`, "error");
+      showToast('Error finishing ride', 'error');
     }
   };
 
+  const handleJoinParticipation = async () => {
+    try {
+      setRefreshing(true);
+      const response = await fetch(`${API_BASE_URL}/api/ride/${ride.id || ride._id}/join-participation`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId })
+      });
+      const data = await response.json();
+      if (data.success) {
+        showToast('Successfully checked into the ride!', 'success');
+        await fetchRide();
+      } else {
+        showToast(data.message || 'Check-in failed', 'error');
+      }
+    } catch (err) {
+      showToast('Error during check-in', 'error');
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const handleChat = (contactId, contactName) => {
     navigate('/chat', {
@@ -438,6 +457,47 @@ function MyRideDetailsPage() {
               </button>
             </div>
 
+            {/* ── Participation Sync (NEW) ── */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between px-1">
+                <h3 className="text-[10px] font-black text-gray-300 uppercase tracking-[0.2em]">Manifest & Participation</h3>
+                <span className="text-[9px] font-bold text-gray-400 uppercase">{ride.passengers?.length || 0} / {ride.capacity || 0} Filled</span>
+              </div>
+              
+              <div className="space-y-3">
+                {(ride.passengers || ride.passengerDetails || []).map((p, idx) => (
+                  <div key={idx} className="bg-white border border-gray-100 p-4 rounded-2xl flex items-center justify-between shadow-sm">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-black rounded-lg flex items-center justify-center text-[10px] font-black text-white">
+                        {p.avatar || (p.name || 'P')[0].toUpperCase()}
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-black text-black uppercase tracking-tight">{p.name}</p>
+                        <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">{p.collegeId || 'ID Verified'}</p>
+                      </div>
+                    </div>
+                    <div className={`px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest border ${
+                      p.joined 
+                        ? 'bg-emerald-50 text-emerald-600 border-emerald-100' 
+                        : 'bg-gray-50 text-gray-400 border-gray-100'
+                    }`}>
+                      {p.joined ? '● Checked In' : '○ Not Joined'}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Passenger Check-in Action */}
+              {ride.role === 'Passenger' && ride.status === 'ongoing' && !((ride.passengers || []).find(p => p.userId === userId)?.joined) && (
+                <button
+                  onClick={handleJoinParticipation}
+                  className="w-full bg-emerald-500 text-white py-4 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] shadow-lg shadow-emerald-500/20 hover:bg-emerald-600 active:scale-95 transition-all mt-4"
+                >
+                  Confirm Joining (Check-in)
+                </button>
+              )}
+            </div>
+
             {ride.status === 'completed' && !ratedUserIds.includes(ride.driverId || ride.createdBy) && (
               <div className="bg-amber-50/30 p-8 rounded-[2.5rem] mt-4 animate-in slide-in-from-top-2 duration-400">
                 <h3 className="text-[11px] font-black text-black uppercase tracking-[0.2em] mb-6 flex items-center gap-3">
@@ -482,7 +542,7 @@ function MyRideDetailsPage() {
 
         {/* ── Action Buttons ── */}
         <div className="pt-8 space-y-4">
-          {isDriver && (ride.status === 'upcoming' || ride.status === 'accepted') && (
+          {isDriver && ride.status === 'accepted' && (
             <button
               onClick={handleStartRide}
               className="w-full bg-black text-white py-5 rounded-[2rem] text-[10px] font-black uppercase tracking-[0.2em] shadow-lg shadow-black/10 hover:opacity-90 active:scale-[0.98] transition-all"
@@ -491,7 +551,7 @@ function MyRideDetailsPage() {
             </button>
           )}
 
-          {isDriver && (ride.status === 'ongoing') && (
+          {isDriver && ride.status === 'ongoing' && (
             <button
               onClick={handleFinishRide}
               className="w-full bg-black text-white py-5 rounded-[2rem] text-[10px] font-black uppercase tracking-[0.2em] shadow-lg shadow-black/10 hover:opacity-90 active:scale-[0.98] transition-all"

@@ -56,11 +56,11 @@ function MyRidesPage() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('posted');
   const [rides, setRides] = useState({
-    posted: { upcoming: [], ongoing: [], completed: [] },
-    booked: { upcoming: [], ongoing: [], completed: [] }
+    posted: { accepted: [], ongoing: [], completed: [] },
+    booked: { accepted: [], ongoing: [], completed: [] }
   });
   const [loading, setLoading] = useState(true);
-  const sections = ['Upcoming', 'Ongoing', 'Completed'];
+  const sections = ['Accepted', 'Ongoing', 'Completed'];
 
   useEffect(() => {
     const fetchMyRides = async () => {
@@ -78,8 +78,8 @@ function MyRidesPage() {
 
         if (response.ok && data.success) {
           setRides({
-            posted: data.posted || { upcoming: [], ongoing: [], completed: [] },
-            booked: data.booked || { upcoming: [], ongoing: [], completed: [] }
+            posted: data.posted || { accepted: [], ongoing: [], completed: [] },
+            booked: data.booked || { accepted: [], ongoing: [], completed: [] }
           });
         }
       } catch (err) {
@@ -100,7 +100,7 @@ function MyRidesPage() {
 
   const totalRidesInTab = () => {
     const tabData = rides[activeTab];
-    return (tabData.upcoming?.length || 0) + (tabData.ongoing?.length || 0) + (tabData.completed?.length || 0);
+    return (tabData.accepted?.length || 0) + (tabData.ongoing?.length || 0) + (tabData.completed?.length || 0);
   };
 
   return (

@@ -518,7 +518,7 @@ def post_ride():
             "capacity": data.get('passengers', 1),
             "passengerPreference": data.get('passengerPreference', 'Any'),
             "passengers": [], 
-            "status": "upcoming",
+            "status": "accepted",
             "createdAt": datetime.now(),
             "from": data.get('startingFrom'),
             "to": data.get('goingTo'),
@@ -550,7 +550,7 @@ def post_ride():
                 "capacity": data.get('passengers', 1),
                 "passengerPreference": data.get('passengerPreference', 'Any'),
                 "passengers": [], 
-                "status": "upcoming",
+                "status": "accepted",
                 "createdAt": datetime.now(),
                 "from": data.get('goingTo'),
                 "to": data.get('startingFrom'),
@@ -584,7 +584,7 @@ def search_rides():
 
     try:
         # Initial extraction of all possible rides
-        query = {"status": "upcoming"}
+        query = {"status": "accepted"}
         # Only add date to query if it's actually provided and not empty
         if data.get('date'):
             query["date"] = data.get('date')
@@ -718,7 +718,7 @@ def search_rides():
 def cluster_rides():
     try:
         # Fetch all rides
-        cursor = rides_col.find({"status": "upcoming"})
+        cursor = rides_col.find({"status": "accepted"})
         rides_list = []
         X = []
         
@@ -786,7 +786,7 @@ def match_rides():
     DETOUR_LIMIT = 2.0  # in kilometers
     
     try:
-        cursor = rides_col.find({"status": "upcoming"})
+        cursor = rides_col.find({"status": "accepted"})
         matched_rides = []
         
         for doc in cursor:
@@ -836,7 +836,7 @@ def optimize_rides():
         return jsonify({"success": False, "message": "Missing geographic attributes for GA evaluation."}), 400
         
     try:
-        cursor = rides_col.find({"status": "upcoming"})
+        cursor = rides_col.find({"status": "accepted"})
         matched_rides = []
         
         # 1. Establish initial population constraint natively mapped logically by Detour limit (2km)
@@ -941,9 +941,10 @@ def join_ride():
         passenger_detail = {
             "userId": user_id,
             "name": user.get('name') or user.get('username', 'Unknown'),
+            "collegeId" : user.get('collegeId', 'N/A'),
             "rating": user.get('rating', 0),
             "avatar": (user.get('name') or user.get('username', 'U'))[0].upper(),
-            "joined": True
+            "joined": False
         }
 
         rides_col.update_one(
@@ -989,8 +990,8 @@ def start_ride():
         if str(ride.get('driverId') or ride.get('createdBy')) != str(user_id):
             return jsonify({"success": False, "message": "Only the driver can start the ride"}), 403
 
-        if ride.get('status') != 'upcoming':
-            return jsonify({"success": False, "message": "Only 'Scheduled' rides can be started"}), 400
+        if ride.get('status') != 'accepted':
+            return jsonify({"success": False, "message": "Only 'accepted' rides can be started"}), 400
             
         rides_col.update_one({"_id": ObjectId(ride_id)}, {"$set": {"status": "ongoing"}})
         
@@ -1026,7 +1027,7 @@ def end_ride():
             return jsonify({"success": False, "message": "Only the driver can end the ride"}), 403
 
         if ride.get('status') != 'ongoing':
-            return jsonify({"success": False, "message": "Only 'Ongoing' rides can be ended"}), 400
+            return jsonify({"success": False, "message": "Only 'ongoing' rides can be ended"}), 400
 
         rides_col.update_one({"_id": ObjectId(ride_id)}, {"$set": {"status": "completed"}})
         
@@ -1052,6 +1053,38 @@ def end_ride():
 def book_ride():
     return join_ride()
 
+@app.route("/api/ride/<ride_id>/join-participation", methods=["PUT", "OPTIONS"])
+def join_participation(ride_id):
+    data = safe_json()
+    user_id = data.get('userId')
+    
+    if not ride_id or not user_id:
+        return jsonify({"success": False, "message": "Missing rideId or userId"}), 400
+        
+    try:
+        ride = rides_col.find_one({"_id": ObjectId(ride_id)})
+        if not ride:
+            return jsonify({"success": False, "message": "Ride not found"}), 404
+            
+        if ride.get('status') != 'ongoing':
+            return jsonify({"success": False, "message": "Ride is not currently ongoing"}), 400
+            
+        # Update specific passenger's joined status
+        # Note: We update both 'passengers' and 'passengerDetails' for redundancy/compatibility
+        rides_col.update_one(
+            {"_id": ObjectId(ride_id), "passengers.userId": user_id},
+            {"$set": {"passengers.$.joined": True}}
+        )
+        rides_col.update_one(
+            {"_id": ObjectId(ride_id), "passengerDetails.userId": user_id},
+            {"$set": {"passengerDetails.$.joined": True}}
+        )
+        
+        return jsonify({"success": True, "message": "Successfully joined the ongoing ride"}), 200
+    except Exception as e:
+        print(f"Participation Error: {e}")
+        return jsonify({"success": False, "message": "Database error"}), 500
+
 
 def _normalize_ride(doc, role, current_date_str):
     """Helper to normalize a single ride document for frontend consumption."""
@@ -1065,9 +1098,9 @@ def _normalize_ride(doc, role, current_date_str):
     ride["from"] = from_loc
     ride["to"] = to_loc
     
-    stored_status = ride.get("status", "upcoming")
-    if stored_status == "Scheduled" or stored_status == "Upcoming" or stored_status == "upcoming":
-        ride["status"] = "upcoming"
+    stored_status = ride.get("status", "accepted")
+    if stored_status in ["Scheduled", "Upcoming", "upcoming", "accepted"]:
+        ride["status"] = "accepted"
     else:
         ride["status"] = stored_status.lower() if isinstance(stored_status, str) else stored_status
 
@@ -1088,8 +1121,8 @@ def get_my_rides_v2(user_id):
     try:
         current_date_str = datetime.now().strftime('%Y-%m-%d')
 
-        posted = {"upcoming": [], "ongoing": [], "completed": []}
-        booked = {"upcoming": [], "ongoing": [], "completed": []}
+        posted = {"accepted": [], "ongoing": [], "completed": []}
+        booked = {"accepted": [], "ongoing": [], "completed": []}
 
         # Posted: driverId match or createdBy match
         for doc in rides_col.find({"$or": [{"driverId": user_id}, {"createdBy": user_id}]}):
