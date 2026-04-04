@@ -386,10 +386,36 @@ function MyRideDetailsPage() {
 
         {/* ── Driver Contact (If Passenger) ── */}
         {ride.role === 'Passenger' && ride.createdBy && (
-          <div className="pt-4 border-t border-gray-50 flex flex-col gap-4">
+          <div className="pt-4 border-t border-gray-50 flex flex-col gap-6">
+            
+            {/* ── Driver Profile Summary (Safe Render) ── */}
+            <div className="bg-gray-50/50 p-6 rounded-[2rem] border border-gray-100 flex items-center gap-4">
+              <div className="w-12 h-12 bg-black rounded-xl flex-shrink-0 flex items-center justify-center text-white overflow-hidden shadow-sm">
+                {ride.driver?.avatar ? (
+                  <img src={ride.driver.avatar} alt="driver" className="w-full h-full object-cover" />
+                ) : (
+                  <span className="text-xs font-black">
+                    {(typeof ride.driver === 'object' ? (ride.driver?.name || 'D') : (ride.driver || 'D'))[0].toUpperCase()}
+                  </span>
+                )}
+              </div>
+              <div className="flex-1">
+                <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-0.5 italic">Your Captain</p>
+                <h4 className="text-xs font-black text-black uppercase tracking-tight">
+                  {typeof ride.driver === 'object' ? ride.driver?.name : (ride.driver || "Verified Driver")}
+                </h4>
+              </div>
+              <div className="bg-white px-3 py-1.5 rounded-full border border-gray-100 flex items-center gap-1.5 shadow-sm">
+                <span className="text-[10px] font-black text-black">⭐ {(typeof ride.driver === 'object' ? ride.driver?.rating : ride.rating) || '5.0'}</span>
+              </div>
+            </div>
+
             <div className="flex gap-2">
               <button
-                onClick={() => handleChat(ride.driverId || ride.createdBy, ride.driver)}
+                onClick={() => handleChat(
+                  ride.driverId || ride.createdBy, 
+                  typeof ride.driver === "object" ? ride.driver?.name : ride.driver
+                )}
                 className="flex-1 bg-white border-2 border-black text-black py-4 rounded-[2rem] text-[10px] font-black uppercase tracking-[0.2em] shadow-sm hover:bg-gray-50 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -398,7 +424,10 @@ function MyRideDetailsPage() {
                 Message Driver
               </button>
               <button
-                onClick={() => openReportModal(ride.driverId || ride.createdBy, ride.driver || 'Driver')}
+                onClick={() => openReportModal(
+                  ride.driverId || ride.createdBy, 
+                  typeof ride.driver === "object" ? ride.driver?.name : (ride.driver || 'Driver')
+                )}
                 className="w-16 bg-gray-50 text-gray-400 rounded-[2rem] flex items-center justify-center hover:text-red-500 transition-colors"
                 title="Report Driver"
               >
