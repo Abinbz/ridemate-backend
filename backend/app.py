@@ -2066,39 +2066,47 @@ def admin_reject_verification(user_id):
         print(f"Admin Reject Error: {e}")
         return jsonify({"success": False, "message": "Database error"}), 500
 
-@app.route("/api/upload-documents", methods=["POST", "OPTIONS"])
+@app.route('/api/upload-documents', methods=['POST', 'OPTIONS'])
 def user_upload_documents():
-    """Recieves the Cloudinary URL from the frontend and updates the user record."""
+    """Receives Cloudinary URLs from the frontend and updates the user record."""
     try:
         data = safe_json()
         user_id = data.get("userId")
-        doc_type = data.get("type") # license, rc, or insurance
-        file_url = data.get("fileUrl")
+        
+        if not user_id:
+            return jsonify({"success": False, "message": "Missing userId"}), 400
 
-        print(f"DEBUG: Incoming document upload: {user_id}, {doc_type}, {file_url}")
+        # Part 1: Backend fix - Handle partial uploads safely
+        update_data = {}
+        
+        # Map specific document types if they exist in the payload
+        docs_to_map = {
+            "license": data.get("license") or (data.get("fileUrl") if data.get("type") == "license" else None),
+            "rc": data.get("rc") or (data.get("fileUrl") if data.get("type") == "rc" else None),
+            "insurance": data.get("insurance") or (data.get("fileUrl") if data.get("type") == "insurance" else None)
+        }
 
-        if not user_id or not doc_type or not file_url:
-            return jsonify({"success": False, "message": "Missing necessary document data"}), 400
+        for doc_type, url in docs_to_map.items():
+            if url:
+                update_data[f"documents.{doc_type}"] = {
+                    "url": url,
+                    "status": "pending",
+                    "reason": "",
+                    "updatedAt": datetime.now()
+                }
 
-        # Update MongoDB with nested document structure
+        # Part 2: Handle licenseNumber safely
+        # Check both top-level and nested structure possibilities
+        lic_num = data.get("licenseNumber") or data.get("number")
+        if lic_num:
+            update_data["documents.license.number"] = lic_num
+
+        if not update_data:
+            return jsonify({"success": False, "message": "No document data provided"}), 400
+
         uid = ObjectId(user_id) if ObjectId.is_valid(user_id) else user_id
         
-        update_data = {
-            f"documents.{doc_type}": {
-                "url": file_url,
-                "status": "pending",
-                "reason": "",
-                "updatedAt": datetime.now()
-            }
-        }
-        
-        # Additional field for license: licenseNumber
-        if doc_type == "license":
-            # Extract licenseNumber from payload
-            lic_num = data.get("licenseNumber")
-            if lic_num:
-                update_data["documents.license.number"] = lic_num
-
+        # Part 3: Use MongoDB update correctly
         result = users_col.update_one(
             {"_id": uid},
             {"$set": update_data}
@@ -2111,6 +2119,9 @@ def user_upload_documents():
         user = users_col.find_one({"_id": uid})
         u_name = user.get('name') or user.get('username') or 'User'
         
+        # Identify which docs were uploaded for the notification message
+        uploaded_doc_names = ", ".join([k.upper() for k in docs_to_map.keys() if docs_to_map[k]])
+
         admins = list(users_col.find({"role": "admin"}))
         for admin in admins:
             notifications_col.insert_one({
@@ -2118,17 +2129,19 @@ def user_upload_documents():
                 "fromId": user_id,
                 "type": "admin_alert",
                 "title": "Document Verification Required",
-                "message": f"{u_name} has submitted a new {doc_type} for review.",
+                "message": f"{u_name} has submitted {uploaded_doc_names} for review.",
                 "isRead": False,
                 "createdAt": datetime.now()
             })
             send_push_notification(str(admin["_id"]), "KYC Submission", f"{u_name} uploaded documents for review.", {"type": "admin_alert"})
 
-        return jsonify({"success": True, "message": f"{doc_type.capitalize()} uploaded"}), 200
+        # Part 5: Ensure route returns success
+        return jsonify({"success": True})
 
     except Exception as e:
-        print(f"Upload Docs Error: {e}")
-        return jsonify({"success": False, "message": str(e)}), 500
+        # Part 4: Add error logging
+        print("UPLOAD ERROR:", str(e))
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/api/upload", methods=["POST", "OPTIONS"])
 def upload_file():
