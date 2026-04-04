@@ -9,6 +9,7 @@ function RideDetailsPage() {
   const { showToast } = useToast();
   const { ride } = location.state || {};
   const [userData, setUserData] = useState(null);
+  const [isBooking, setIsBooking] = useState(false);
   const userId = localStorage.getItem('userId');
 
   // Part 4.5: Security - Monitor user status on mount
@@ -45,6 +46,8 @@ function RideDetailsPage() {
 
   const handleJoinRide = async () => {
     const rideId = ride.id || ride._id;
+    // Part 4.5: Parse user from localStorage as requested
+    const storedUser = JSON.parse(localStorage.getItem("user") || "{}");
 
     if (!userId) {
       showToast('Please log in to join a ride.', 'error');
@@ -52,7 +55,8 @@ function RideDetailsPage() {
       return;
     }
 
-    if (userData?.isBanned) {
+    // 🚫 Block banned user logic
+    if (userData?.isBanned || storedUser?.isBanned) {
       showToast('Your account is restricted from joining rides.', 'error');
       return;
     }
@@ -62,7 +66,7 @@ function RideDetailsPage() {
       return;
     }
 
-    setBooking(true);
+    setIsBooking(true);
     try {
       console.log("API CALL:", `${API_BASE_URL}/api/join-ride`);
       const response = await fetch(`${API_BASE_URL}/api/join-ride`, {
@@ -82,7 +86,7 @@ function RideDetailsPage() {
       console.error('Join ride error:', err);
       showToast('Server not reachable. Check backend connection.', 'error');
     } finally {
-      setBooking(false);
+      setIsBooking(false);
     }
   };
 
@@ -208,11 +212,11 @@ function RideDetailsPage() {
         </button>
         <button
           onClick={handleJoinRide}
-          disabled={booking || !canJoin || isBanned}
+          disabled={isBooking || !canJoin || isBanned}
           className={`flex-[1.5] py-5 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest active:scale-[0.98] transition-all
-            ${booking || !canJoin || isBanned ? 'bg-gray-300 cursor-not-allowed' : 'bg-black hover:bg-gray-900'}`}
+            ${isBooking || !canJoin || isBanned ? 'bg-gray-300 cursor-not-allowed' : 'bg-black hover:bg-gray-900'}`}
         >
-          {booking ? 'Joining...' : isBanned ? 'Account Restricted' : isJoined ? 'Joined' : isDriver ? 'Your Ride' : canJoin ? 'Join Ride' : 'Closed'}
+          {isBooking ? 'Joining...' : isBanned ? 'Account Restricted' : isJoined ? 'Joined' : isDriver ? 'Your Ride' : canJoin ? 'Join Ride' : 'Closed'}
         </button>
       </div>
     </div>
