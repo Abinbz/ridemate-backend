@@ -42,7 +42,13 @@ const NotificationsPage = () => {
         }
     };
 
-    const getIcon = (type) => {
+    const getIcon = (type, title = "") => {
+        if (type === 'admin-action') {
+            if (title.includes('Restricted')) return '🚫';
+            if (title.includes('Restored')) return '✅';
+            if (title.includes('Role')) return '🔄';
+            return '🛡️';
+        }
         switch (type) {
             case 'verification': return '🛡️';
             case 'driver': return '🪪';
@@ -83,7 +89,7 @@ const NotificationsPage = () => {
                                 <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-xl shadow-sm ${
                                     notif.isRead ? 'bg-gray-50' : 'bg-black text-white'
                                 }`}>
-                                    {getIcon(notif.type)}
+                                    {getIcon(notif.type, notif.title)}
                                 </div>
                                 <div className="space-y-1 flex-1">
                                     <div className="flex justify-between items-start">

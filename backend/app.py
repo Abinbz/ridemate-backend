@@ -1687,43 +1687,84 @@ def verify_user_decision():
 
 @app.route('/api/admin/update-user-status', methods=['POST', 'OPTIONS'])
 def update_user_status():
-    """Administrative management route for roles and bans."""
+    """Administrative management route with intelligent notification loop."""
     if request.method == 'OPTIONS':
         return jsonify({"success": True}), 200
         
     try:
         data = safe_json()
-        print("📦 Admin Update User Status data:", data)
-
         user_id = data.get('userId')
-        role = data.get('role')
-        is_banned = data.get('isBanned')
-        ban_reason = data.get('banReason', '')
+        new_role = data.get('role')
+        new_is_banned = data.get('isBanned')
+        new_ban_reason = data.get('banReason', '')
 
         if not user_id:
             return jsonify({"success": False, "message": "Missing userId"}), 400
 
+        # Part 1: Smart State Comparison
+        current_user = users_col.find_one({"_id": ObjectId(user_id)})
+        if not current_user:
+            return jsonify({"success": False, "message": "User not found"}), 404
+
+        old_role = current_user.get('role', 'user')
+        old_is_banned = current_user.get('isBanned', False)
+
         update_fields = {}
-        if role:
-            update_fields['role'] = role
+        notifications_to_send = []
 
-        if is_banned is not None:
-            update_fields['isBanned'] = is_banned
-            update_fields['banReason'] = ban_reason if is_banned else ""
+        # 🔹 Condition A: Role Change Detection
+        if new_role and new_role != old_role:
+            update_fields['role'] = new_role
+            notifications_to_send.append({
+                "title": "Account Role Updated",
+                "message": f"Your platform role has been set to: {new_role.upper()}",
+                "type": "admin-action"
+            })
 
+        # 🔹 Condition B: Ban/Unban Detection
+        if new_is_banned is not None and new_is_banned != old_is_banned:
+            update_fields['isBanned'] = new_is_banned
+            update_fields['banReason'] = new_ban_reason if new_is_banned else ""
+            
+            if new_is_banned:
+                msg = f"Your account has been restricted: {new_ban_reason or 'Policy Violation'}"
+                notifications_to_send.append({
+                    "title": "Access Restricted",
+                    "message": msg,
+                    "type": "admin-action"
+                })
+            else:
+                notifications_to_send.append({
+                    "title": "Access Restored",
+                    "message": "Your account has been successfully unbanned. Strategic operations back online.",
+                    "type": "admin-action"
+                })
+
+        # Only update if there are changes
         if not update_fields:
-            return jsonify({"success": False, "message": "No updates provided"}), 400
+            return jsonify({"success": True, "message": "No changes detected"}), 200
 
-        result = users_col.update_one(
+        # Part 2: Execute Database Update
+        users_col.update_one(
             {"_id": ObjectId(user_id)},
             {"$set": update_fields}
         )
 
-        if result.matched_count == 0:
-            return jsonify({"success": False, "message": "User not found"}), 404
+        # Part 3: Dispatch Notifications
+        for notif in notifications_to_send:
+            notifications_col.insert_one({
+                "userId": user_id,
+                "type": notif["type"],
+                "title": notif["title"],
+                "message": notif["message"],
+                "isRead": False,
+                "createdAt": datetime.now()
+            })
+            # Also trigger Push Notify (Firebase logic from previous turns)
+            # send_push_notification(user_id, notif["title"], notif["message"], {"type": "admin-action"})
 
-        print(f"[ADMIN] User status updated: {user_id} - {update_fields}")
-        return jsonify({"success": True, "message": "User status updated successfully"}), 200
+        print(f"[ADMIN ACTION] User {user_id} updated. Actions: {[n['title'] for n in notifications_to_send]}")
+        return jsonify({"success": True, "message": "User updated and notified"}), 200
 
     except Exception as e:
         print("ADMIN UPDATE ERROR:", e)
