@@ -1,5 +1,6 @@
 import json
 import os
+from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from datetime import datetime, timedelta
 from bson.objectid import ObjectId
@@ -131,14 +132,19 @@ try:
     ratings_col = db["ratings"]
     notifications_col = db["notifications"]
     verifications_col = db["verifications"]
+    admins_col = db["admins"]  # Initialize admins collection
+    
+    print("Successfully connected to MongoDB.")
+    print("DB:", db.name)  # Debug log for DB connection
     # Trigger a connection test
     client.server_info()
     print("Successfully connected to MongoDB.")
     # Export them globally
-    global users_collection, rides_collection
+    global users_collection, rides_collection, admins_collection
     # For compatibility with snippets
     users_collection = users_col
     rides_collection = rides_col
+    admins_collection = admins_col
 except Exception as e:
     print(f"MongoDB connection failed. Check if service is running: {e}")
 
@@ -267,6 +273,9 @@ def signup():
         if users_col.find_one({"username": data['username']}):
             return jsonify({"success": False, "message": "Username already exists"}), 409
 
+        # Security: Hash the password before saving (Production-mode)
+        hashed_password = generate_password_hash(data['password'])
+
         # Construct User Document
         user_doc = {
             "name": data['name'],
@@ -275,7 +284,7 @@ def signup():
             "email": data['email'],
             "phone": data['phone'],
             "gender": data['gender'],
-            "password": data['password'], # Note: Unhashed for quick prototype
+            "password": hashed_password, 
             "role": "user",
             "isVerified": False,
             "isBlocked": False,
@@ -283,7 +292,7 @@ def signup():
         }
         
         result = users_col.insert_one(user_doc)
-        print(f"User signed up and saved to DB: {user_doc['username']} ({result.inserted_id})")
+        print(f"DEBUG: User signed up: {user_doc['username']} - ID: {result.inserted_id}")
         return jsonify({"success": True, "message": "Signup successful", "userId": str(result.inserted_id)}), 201
     except Exception as e:
         print(f"Signup DB Error: {e}")
@@ -292,7 +301,7 @@ def signup():
 @app.route("/api/login", methods=["POST", "OPTIONS"])
 def login():
     data = safe_json()
-    if not data or not data.get('username') or not data.get('passphrase'):
+    if not data or not data.get('username') or not data.get('password'):
         return jsonify({"success": False, "message": "Missing credentials"}), 400
     
     # Requirement: "Validate email format and password presence"
@@ -305,43 +314,64 @@ def login():
             return jsonify({"success": False, "message": "Username cannot contain spaces"}), 400
 
     try:
-        user = users_col.find_one({"username": data['username'], "password": data['passphrase']})
+        user = users_col.find_one({"username": data['username']})
         
         if user:
-            # Check if user is blocked
-            if user.get('isBlocked', False):
-                print(f"Blocked user attempted login: {user['username']}")
-                return jsonify({"success": False, "message": "Your account has been blocked. Contact admin."}), 403
-            print(f"User logged in from DB: {user['username']}")
-            return jsonify({"success": True, "message": "Login successful", "userId": str(user["_id"])}), 200
+            # Verify password hash using check_password_hash (werkzeug.security)
+            stored_hash = user.get('password')
+            provided_pass = data.get('password', '')
+
+            if check_password_hash(stored_hash, provided_pass):
+                # Check if user is blocked
+                if user.get('isBlocked', False):
+                    print(f"DEBUG: Blocked user attempted login: {user['username']}")
+                    return jsonify({"success": False, "message": "Your account has been blocked. Contact admin."}), 403
+                
+                print(f"DEBUG: User logged in: {user['username']} ({user.get('role')})")
+                return jsonify({"success": True, "message": "Login successful", "userId": str(user["_id"])}), 200
+            else:
+                print(f"DEBUG: Login failed: Password mismatch for {data['username']}")
+                return jsonify({"success": False, "message": "Invalid username or password"}), 401
         else:
+            print(f"DEBUG: Login failed: User {data['username']} not found")
             return jsonify({"success": False, "message": "Invalid username or password"}), 401
     except Exception as e:
-        print(f"Login DB Error: {e}")
+        print(f"DEBUG: Login DB Error: {e}")
         return jsonify({"success": False, "message": "Database error"}), 500
 
 @app.route("/api/admin/login", methods=["POST", "OPTIONS"])
 def admin_login():
     data = safe_json()
-    if not data or not data.get('username') or not data.get('password'):
+    print("DEBUG: Incoming admin login data:", data)
+
+    username = data.get("username")
+    password = data.get("password")
+
+    if not username or not password:
         return jsonify({"success": False, "message": "Missing credentials"}), 400
 
-    # No spaces in Admin ID
-    if not validate_username_no_spaces(data.get('username', '')):
-        return jsonify({"success": False, "message": "Admin ID cannot contain spaces"}), 400
+    try:
+        # Query the admins collection using username
+        admin = admins_col.find_one({"username": username})
+        print("DEBUG: DB Admin found:", admin)
 
-    if data.get('username') == 'adminkmct' and data.get('password') == 'Kmct@2026.':
-        print("Admin logged in")
-        # Ensure 'adminkmct' has admin role in DB for notification routing
-        users_col.update_one(
-            {"username": "adminkmct"},
-            {"$set": {"role": "admin", "name": "System Admin"}},
-            upsert=True
-        )
-        admin = users_col.find_one({"username": "adminkmct"})
-        return jsonify({"success": True, "message": "Admin login successful", "userId": str(admin["_id"])}), 200
-    else:
-        return jsonify({"success": False, "message": "Invalid Admin Credentials"}), 401
+        if not admin:
+            print(f"DEBUG: Admin login failed: {username} not found")
+            return jsonify({"success": False, "message": "Invalid Admin Credentials"}), 401
+
+        # Verify password hash for admin using check_password_hash
+        stored_hash = admin.get("password")
+        is_valid = check_password_hash(stored_hash, password)
+        
+        if is_valid:
+            print(f"DEBUG: Admin {username} logged in successfully")
+            return jsonify({"success": True})
+        else:
+            print(f"DEBUG: Admin login failed: Password mismatch for {username}")
+            return jsonify({"success": False, "message": "Invalid Admin Credentials"}), 401
+    except Exception as e:
+        print(f"DEBUG: Admin Login Error: {e}")
+        return jsonify({"success": False, "message": "Database error"}), 500
 
 @app.route("/api/user/<user_id>", methods=["GET", "OPTIONS"])
 def get_user(user_id):
@@ -399,10 +429,13 @@ def post_ride():
         return jsonify({"success": False, "message": "Missing route details"}), 400
         
     try:
-        # Construct Ride Document as requested
+        # User requested standardization and logging
+        print(f"DEBUG: Post Ride Attempt - Body: {data}")
+
+        # Construct Ride Document
         ride_doc = {
             "driverId": data.get('userId') or data.get('createdBy'),
-            "driverName": data.get('username') or data.get('driver'),
+            "driverName": data.get('username') or data.get('driver') or "Unknown Driver",
             "fromLocation": data.get('startingFrom'),
             "toLocation": data.get('goingTo'),
             "date": data.get('date'),
@@ -410,26 +443,31 @@ def post_ride():
             "vehicleName": data.get('vehicleName', 'Unknown'),
             "vehicleType": data.get('vehicleType', 'Car'),
             "price": data.get('price'),
+            "capacity": data.get('passengers', 1),
+            "passengerPreference": data.get('passengerPreference', 'Any'),
             "passengers": [], 
             "status": "Scheduled",
             "createdAt": datetime.now(),
-            # Keep these for internal matching/search compatibility
             "from": data.get('startingFrom'),
             "to": data.get('goingTo'),
             "createdBy": data.get('userId') or data.get('createdBy'),
             "bookedUsers": [],
-            "passengerDetails": []
+            "passengerDetails": [],
+            "startLat": data.get('startLat'),
+            "startLng": data.get('startLng'),
+            "endLat": data.get('endLat'),
+            "endLng": data.get('endLng')
         }
         
         is_round_trip = data.get('isRoundTrip', False)
         result = rides_col.insert_one(ride_doc)
-        print("Forward Ride created:", ride_doc['fromLocation'], "->", ride_doc['toLocation'])
+        print(f"DEBUG: Forward Ride created: {ride_doc['fromLocation']} -> {ride_doc['toLocation']} - ID: {result.inserted_id}")
 
         if is_round_trip:
-            print("Return ride enabled: creating second ride...")
+            print("DEBUG: Round trip detected: creating return ride...")
             return_ride = {
                 "driverId": data.get('userId') or data.get('createdBy'),
-                "driverName": data.get('username') or data.get('driver'),
+                "driverName": data.get('username') or data.get('driver') or "Unknown Driver",
                 "fromLocation": data.get('goingTo'),
                 "toLocation": data.get('startingFrom'),
                 "date": data.get('returnDate') or data.get('date'),
@@ -437,6 +475,8 @@ def post_ride():
                 "vehicleName": data.get('vehicleName', 'Unknown'),
                 "vehicleType": data.get('vehicleType', 'Car'),
                 "price": data.get('returnPrice') or data.get('price'),
+                "capacity": data.get('passengers', 1),
+                "passengerPreference": data.get('passengerPreference', 'Any'),
                 "passengers": [], 
                 "status": "Scheduled",
                 "createdAt": datetime.now(),
@@ -450,8 +490,8 @@ def post_ride():
                 "endLat": data.get('startLat'),
                 "endLng": data.get('startLng')
             }
-            rides_col.insert_one(return_ride)
-            print("Return Ride created:", return_ride['fromLocation'], "->", return_ride['toLocation'])
+            res_return = rides_col.insert_one(return_ride)
+            print(f"DEBUG: Return Ride created: {return_ride['fromLocation']} -> {return_ride['toLocation']} - ID: {res_return.inserted_id}")
 
         return jsonify({"success": True, "message": "Ride(s) posted successfully"}), 201
     except Exception as e:
@@ -1832,11 +1872,25 @@ def user_upload_documents():
         if not all([license_file, rc_file, insurance_file]):
             return jsonify({"success": False, "message": "All 3 documents (License, RC, Insurance) are required"}), 400
             
-        # Upload to Cloudinary with specific folders and unsigned preset to avoid signature issues
-        # CRITICAL: Requires 'ridemate_unsigned' preset in Cloudinary dashboard (Settings > Upload > Upload presets)
-        license_result = cloudinary.uploader.upload(license_file, folder=f"ridemate/kyc/{user_id}/license", upload_preset="ridemate_unsigned")
-        rc_result = cloudinary.uploader.upload(rc_file, folder=f"ridemate/kyc/{user_id}/rc", upload_preset="ridemate_unsigned")
-        insurance_result = cloudinary.uploader.upload(insurance_file, folder=f"ridemate/kyc/{user_id}/insurance", upload_preset="ridemate_unsigned")
+        # Upload to Cloudinary
+        # We use a preset if available, but ensure it exists. 
+        # If 'Invalid signature' persists, check Cloudinary clock sync or signed/unsigned mismatch.
+        upload_options = {
+            "folder": f"ridemate/kyc/{user_id}",
+            "resource_type": "auto"
+        }
+        
+        # User requested support for unsigned/signed. We'll try signed first as we have the secret.
+        # If 'ridemate_unsigned' is strictly required by the client dashboard:
+        # upload_options["upload_preset"] = "ridemate_unsigned"
+        
+        print(f"DEBUG: Uploading documents for user {user_id}...")
+        
+        license_result = cloudinary.uploader.upload(license_file, **upload_options)
+        rc_result = cloudinary.uploader.upload(rc_file, **upload_options)
+        insurance_result = cloudinary.uploader.upload(insurance_file, **upload_options)
+        
+        print(f"DEBUG: Cloudinary Success - License: {license_result.get('secure_url')}")
         
         doc_entry = {
             "userId": ObjectId(user_id) if ObjectId.is_valid(user_id) else user_id,

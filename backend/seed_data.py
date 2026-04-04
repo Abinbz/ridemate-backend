@@ -1,4 +1,5 @@
 import json
+from werkzeug.security import generate_password_hash
 from datetime import datetime, timedelta
 from bson.objectid import ObjectId
 from pymongo import MongoClient
@@ -14,6 +15,7 @@ messages_col = db["messages"]
 ratings_col = db["ratings"]
 notifications_col = db["notifications"]
 verifications_col = db["verifications"]
+admins_col = db["admins"]
 
 # Clear existing data
 print("Wiping existing data for clean demo seed...")
@@ -24,6 +26,7 @@ messages_col.delete_many({})
 ratings_col.delete_many({})
 notifications_col.delete_many({})
 verifications_col.delete_many({})
+admins_col.delete_many({})
 
 # Constants
 PASSWORD = "Demo@123"
@@ -46,10 +49,22 @@ user_data = [
 ]
 
 # 1. Create Admin
+print("Seeding admin...")
+admin_password_hash = generate_password_hash("Kmct@2026")
+
+# Insert into dedicated admins collection
+admins_col.insert_one({
+    "name": "System Admin",
+    "username": "adminkmct",
+    "password": admin_password_hash,
+    "role": "admin"
+})
+
+# Also insert into users collection for system-wide compatibility
 admin_id = users_col.insert_one({
     "name": "System Admin",
     "username": "adminkmct",
-    "password": "Kmct@2026",
+    "password": admin_password_hash,
     "role": "admin",
     "email": "admin@ridemate.com"
 }).inserted_id
@@ -63,7 +78,7 @@ for name, cid, phone in user_data:
         "email": f"{name}@gmail.com",
         "phone": phone,
         "collegeId": cid,
-        "password": PASSWORD,
+        "password": generate_password_hash(PASSWORD),
         "role": "user",
         "avgRating": round(random.uniform(4.0, 5.0), 1),
         "isVerified": False,

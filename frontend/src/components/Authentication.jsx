@@ -4,7 +4,7 @@ import { API_BASE_URL } from '../config/api';
 import { useToast } from '../context/ToastContext';
 
 function Authentication() {
-  const [authMode, setAuthMode] = useState('userLogin'); // userLogin, userSignup, adminLogin
+  const [authMode, setAuthMode] = useState('user'); // signup, user, admin
   const [formData, setFormData] = useState({
     name: '',
     username: '',
@@ -29,7 +29,7 @@ function Authentication() {
       case 'username':
         if (/\s/.test(value)) error = 'Username cannot contain spaces';
         // If login mode and it looks like an email, validate email format
-        if ((authMode === 'userLogin' || authMode === 'adminLogin') && value.includes('@')) {
+        if ((authMode === 'user' || authMode === 'admin') && value.includes('@')) {
           if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) error = 'Invalid email format';
         }
         break;
@@ -57,7 +57,7 @@ function Authentication() {
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData({ ...formData, [name]: value });
-    
+
     const fieldError = validateField(name, value);
     setValidationErrors({ ...validationErrors, [name]: fieldError });
     setError('');
@@ -66,11 +66,8 @@ function Authentication() {
   const handleAuthSubmit = async (e) => {
     e.preventDefault();
 
-    console.log("🔥 Button clicked");
-    console.log("API URL:", API_BASE_URL);
-
-    const apiUrl = authMode === 'userSignup' ? 'signup' : (authMode === 'userLogin' ? 'login' : 'admin/login');
-    const isSignup = authMode === 'userSignup';
+    const apiUrl = authMode === 'signup' ? 'signup' : (authMode === 'user' ? 'login' : 'admin/login');
+    const isSignup = authMode === 'signup';
 
     if (isSignup) {
       const { name, username, collegeId, email, phone, gender, password } = formData;
@@ -81,7 +78,7 @@ function Authentication() {
     } else {
       const { username, password } = formData;
       if (!username || !password) {
-        setError('Please enter both username and password.');
+        setError('Please enter both credentials.');
         return;
       }
     }
@@ -94,34 +91,30 @@ function Authentication() {
     }
 
     setLoading(true);
-    
+
     // Cold start notification for Render free tier
     const warmupTimer = setTimeout(() => {
       showToast('Waking up server... please wait (up to 30s)', 'info');
     }, 3000);
 
     try {
-      console.log("Current Form Data:", formData);
       const fetchUrl = `${API_BASE_URL}/api/${apiUrl}`;
       let fetchBody;
-      
+
       if (isSignup) {
         fetchBody = formData;
-      } else if (authMode === 'adminLogin') {
-        // Admin login expects adminId and password
-        fetchBody = { 
-          adminId: formData.username, 
-          password: formData.password 
-        };
       } else {
-        // User login expects username and passphrase
-        fetchBody = { 
-          username: formData.username, 
-          passphrase: formData.password 
+        // fetchBody must be { username, password } for both user and admin
+        fetchBody = {
+          username: formData.username,
+          password: formData.password
         };
       }
 
-      console.log("Sending:", authMode, fetchBody);
+      console.log("FORM DATA:", formData);
+      console.log("FETCH BODY:", fetchBody);
+      console.log("AUTH MODE:", authMode);
+      console.log("API URL:", fetchUrl);
 
       const response = await fetch(fetchUrl, {
         method: 'POST',
@@ -130,15 +123,14 @@ function Authentication() {
         },
         body: JSON.stringify(fetchBody)
       });
-      
+
       clearTimeout(warmupTimer);
       const data = await response.json();
       console.log("Response:", data);
 
       if (response.ok && data.success) {
-        if (authMode === 'adminLogin') {
+        if (authMode === 'admin') {
           showToast('Admin Login Successful', 'success');
-          alert('Login successful');
           localStorage.setItem('isAdmin', 'true');
           navigate('/admin/home');
         } else {
@@ -150,10 +142,12 @@ function Authentication() {
           navigate('/user/home');
         }
       } else {
+        // Show specific backend error message
         setError(data.message || 'Authentication failed');
+        console.error("Login Error:", data.message || "Unknown error");
       }
     } catch (err) {
-      console.error("Fetch error:", err);
+      console.error("Login Error:", err);
       setError(`Server error: ${err.message || 'Check backend connection.'}`);
     } finally {
       setLoading(false);
@@ -175,7 +169,7 @@ function Authentication() {
 
         {/* Auth Mode Toggle */}
         <div className="flex border-b border-gray-100 pb-1">
-          {['userSignup', 'userLogin', 'adminLogin'].map((mode) => (
+          {['signup', 'user', 'admin'].map((mode) => (
             <button
               key={mode}
               onClick={() => { setAuthMode(mode); setError(''); }}
@@ -184,7 +178,7 @@ function Authentication() {
                   ? 'border-black text-black'
                   : 'border-transparent text-gray-400 hover:text-gray-600 hover:border-gray-200'}`}
             >
-              {mode === 'userSignup' ? 'Join' : (mode === 'userLogin' ? 'Sign In' : 'Admin')}
+              {mode === 'signup' ? 'Join' : (mode === 'user' ? 'Sign In' : 'Admin')}
             </button>
           ))}
         </div>
@@ -199,7 +193,7 @@ function Authentication() {
         )}
 
         <form onSubmit={handleAuthSubmit} className="space-y-4">
-          {authMode === 'userSignup' && (
+          {authMode === 'signup' && (
             <>
               <div className="space-y-1">
                 <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">Display Name</label>
@@ -247,17 +241,17 @@ function Authentication() {
 
           <div className="space-y-1">
             <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">
-              {authMode === 'adminLogin' ? 'Admin ID' : 'Username'}
+              Username
             </label>
             <input name="username" value={formData.username} onChange={handleInputChange}
               className={`w-full px-4 py-3 bg-gray-50 border rounded-[1.5rem] text-xs font-bold focus:outline-none transition-all 
                 ${validationErrors.username ? 'border-red-500 bg-red-50' : 'border-transparent focus:bg-white focus:border-black'}`}
-              placeholder={authMode === 'adminLogin' ? 'admin_root' : 'Username'} />
+              placeholder="Username" />
             {validationErrors.username && <p className="text-[9px] text-red-500 font-bold px-4">{validationErrors.username}</p>}
           </div>
 
           <div className="space-y-1">
-            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">Passphrase</label>
+            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">Password</label>
             <input name="password" type="password" value={formData.password} onChange={handleInputChange}
               className={`w-full px-4 py-3 bg-gray-50 border rounded-[1.5rem] text-xs font-bold focus:outline-none transition-all 
                 ${validationErrors.password ? 'border-red-500 bg-red-50' : 'border-transparent focus:bg-white focus:border-black'}`}
@@ -265,10 +259,10 @@ function Authentication() {
             {validationErrors.password && <p className="text-[9px] text-red-500 font-bold px-4">{validationErrors.password}</p>}
           </div>
 
-          <button type="submit" 
+          <button type="submit"
             disabled={loading || Object.values(validationErrors).some(err => err !== '')}
             className="w-full py-4 mt-8 bg-black text-white text-[10px] font-black uppercase tracking-[0.2em] rounded-[1.5rem] hover:bg-gray-900 active:scale-[0.98] transition-all disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed">
-            {loading ? 'Processing...' : (authMode === 'userSignup' ? 'Create Account' : 'Authenticate')}
+            {loading ? 'Processing...' : (authMode === 'signup' ? 'Create Account' : 'Authenticate')}
           </button>
         </form>
 
