@@ -60,6 +60,9 @@ function PostPage() {
     returnPrice: ''
   });
 
+  const [startCoords, setStartCoords] = useState(null);
+  const [endCoords, setEndCoords] = useState(null);
+  const [routeData, setRouteData] = useState([]);
   const [distance, setDistance] = useState(null);
   const [loading, setLoading] = useState(false);
   const [userData, setUserData] = useState(null);
@@ -199,12 +202,19 @@ function PostPage() {
 
     setLoading(true);
     try {
+      // 3. Before submitting ride: Add validation
+      if (!startCoords || !endCoords) {
+        alert("Please select both pickup and destination coordinates using the map or search result.");
+        return;
+      }
+
+      // 5. Add console debug
+      console.log("Start Coordinate Intel:", startCoords);
+      console.log("End Coordinate Intel:", endCoords);
+
       // Safe resolution of coordinates before posting
       let sc = startCoords;
       let ec = endCoords;
-
-      if (!sc) sc = await getCoordinates(formData.startingFrom);
-      if (!ec) ec = await getCoordinates(formData.goingTo);
 
       const payload = {
         ...formData,
@@ -220,6 +230,9 @@ function PostPage() {
         startLng: sc ? sc[1] : null,
         endLat: ec ? ec[0] : null,
         endLng: ec ? ec[1] : null,
+        // 4. Ensure payload uses these safely (Already done in previous version, reinforcing here)
+        startCoords: sc,
+        endCoords: ec,
         isRoundTrip: formData.isRoundTrip,
         returnDate: formData.returnDate,
         returnTime: formData.returnTime,
