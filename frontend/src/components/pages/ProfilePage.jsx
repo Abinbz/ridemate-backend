@@ -11,7 +11,7 @@ function ProfilePage() {
 
   const [userData, setUserData] = useState(null);
   const [loading, setLoading] = useState(true);
-  
+
   // Vehicle Management State
   const [vehicleTab, setVehicleTab] = useState('list'); // 'list' or 'add'
   const [vehicleList, setVehicleList] = useState([]);
@@ -42,7 +42,7 @@ function ProfilePage() {
         setUserData(data.user);
         // Pre-fill if exists
         if (data.user.documents?.license?.number) {
-            setLicenseNumber(data.user.documents.license.number);
+          setLicenseNumber(data.user.documents.license.number);
         }
       }
     } catch (err) {
@@ -100,13 +100,26 @@ function ProfilePage() {
 
   const handleFileUpload = async (file, type) => {
     if (!file) return;
-    
+
     setUploadStatus(prev => ({ ...prev, [type]: 'uploading' }));
     try {
       const url = await uploadToCloudinary(file);
-      setDocUrls(prev => ({ ...prev, [type]: url }));
-      setUploadStatus(prev => ({ ...prev, [type]: 'done' }));
-      showToast(`${type.toUpperCase()} uploaded successfully.`, 'success');
+      
+      // Part 6: Confirm Cloudinary upload returns valid URL
+      if (url && typeof url === 'string') {
+        // Part 1: Confirm functional state update for DocUrls
+        // Part 5: Prevent state overwrite bug (using functional merge)
+        setDocUrls(prev => ({ 
+          ...prev, 
+          [type]: url 
+        }));
+        
+        // Part 2: Mark as 'done' only after successful sync
+        setUploadStatus(prev => ({ ...prev, [type]: 'done' }));
+        showToast(`${type.toUpperCase()} uploaded successfully.`, 'success');
+      } else {
+        throw new Error(`Invalid URL returned for ${type}`);
+      }
     } catch (err) {
       setUploadStatus(prev => ({ ...prev, [type]: 'idle' }));
       showToast(`Failed to upload ${type}.`, 'error');
@@ -114,33 +127,41 @@ function ProfilePage() {
   };
 
   const handleKYCSubmit = async () => {
-    if (!docUrls.license || !docUrls.rc || !docUrls.insurance) {
-      showToast('Upload all documents before submitting', 'error');
+    // Part 3: Add debug logging
+    console.log("Current docUrls:", docUrls);
+
+    // Part 4: Fix validation logic to allow partial submissions (at least one document)
+    if (!docUrls?.license && !docUrls?.rc && !docUrls?.insurance) {
+      showToast('Upload at least one document to proceed', 'error');
       return;
     }
+    
     if (!licenseNumber) {
-        showToast('Please enter your license number.', 'error');
-        return;
+      showToast('Please enter your license number.', 'error');
+      return;
     }
 
     setIsSubmittingKYC(true);
     try {
       const userId = localStorage.getItem('userId');
-      
+
       const docTypes = ['license', 'rc', 'insurance'];
       for (const type of docTypes) {
-        const payload = {
-          userId,
-          type,
-          fileUrl: docUrls[type],
-          ...(type === 'license' && { licenseNumber })
-        };
+        // Part 8: Only process documents that have been successfully uploaded
+        if (docUrls[type]) {
+          const payload = {
+            userId,
+            type,
+            fileUrl: docUrls[type],
+            ...(type === 'license' && { licenseNumber })
+          };
 
-        await fetch(`${API_BASE_URL}/api/upload-documents`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
+          await fetch(`${API_BASE_URL}/api/upload-documents`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+        }
       }
 
       showToast('Verification submitted successfully!', 'success');
@@ -165,17 +186,17 @@ function ProfilePage() {
         </div>
         <h1 className="text-2xl font-black text-black leading-none mb-2">{userData.username}</h1>
         <div className="flex items-center gap-2 mb-2">
-            <p className="text-[10px] font-bold text-gray-300 uppercase tracking-widest">ID: {userData.collegeId}</p>
-            {userData.isVerified ? (
-                <span className="bg-emerald-50 text-emerald-500 text-[8px] font-black uppercase px-2 py-0.5 rounded-full">Verified</span>
-            ) : (
-                <span className="bg-amber-50 text-amber-500 text-[8px] font-black uppercase px-2 py-0.5 rounded-full">KYC Pending</span>
-            )}
+          <p className="text-[10px] font-bold text-gray-300 uppercase tracking-widest">ID: {userData.collegeId}</p>
+          {userData.isVerified ? (
+            <span className="bg-emerald-50 text-emerald-500 text-[8px] font-black uppercase px-2 py-0.5 rounded-full">Verified</span>
+          ) : (
+            <span className="bg-amber-50 text-amber-500 text-[8px] font-black uppercase px-2 py-0.5 rounded-full">KYC Pending</span>
+          )}
         </div>
       </div>
 
       <div className="px-6 py-8 max-w-xl mx-auto space-y-10">
-        
+
         {/* Core Menu */}
         <section className="space-y-4">
           <h3 className="text-[10px] font-black text-gray-300 uppercase tracking-[0.2em] px-1">Navigation Hub</h3>
@@ -202,13 +223,13 @@ function ProfilePage() {
         <section className="space-y-4">
           <h3 className="text-[10px] font-black text-gray-300 uppercase tracking-[0.2em] px-1">My Vehicles</h3>
           <div className="bg-gray-50/50 p-2 rounded-[2rem] flex gap-2 mb-4">
-            <button 
+            <button
               onClick={() => setVehicleTab('list')}
               className={`flex-1 py-3 text-[9px] font-black uppercase tracking-widest rounded-2xl transition-all ${vehicleTab === 'list' ? 'bg-black text-white shadow-lg' : 'text-gray-400 hover:text-black'}`}
             >
               Collection
             </button>
-            <button 
+            <button
               onClick={() => setVehicleTab('add')}
               className={`flex-1 py-3 text-[9px] font-black uppercase tracking-widest rounded-2xl transition-all ${vehicleTab === 'add' ? 'bg-black text-white shadow-lg' : 'text-gray-400 hover:text-black'}`}
             >
@@ -234,22 +255,22 @@ function ProfilePage() {
             </div>
           ) : (
             <form onSubmit={handleAddVehicle} className="space-y-3 p-1">
-              <input 
-                type="text" 
-                placeholder="Vehicle Name (e.g. Swift)" 
+              <input
+                type="text"
+                placeholder="Vehicle Name (e.g. Swift)"
                 value={newVehicle.name}
-                onChange={e => setNewVehicle({...newVehicle, name: e.target.value})}
+                onChange={e => setNewVehicle({ ...newVehicle, name: e.target.value })}
                 className="w-full px-6 py-5 bg-gray-50 border border-transparent rounded-[2rem] text-xs font-bold focus:outline-none focus:bg-white focus:border-black transition-all"
               />
-              <input 
-                type="text" 
-                placeholder="Vehicle Number (e.g. KL11AB1234)" 
+              <input
+                type="text"
+                placeholder="Vehicle Number (e.g. KL11AB1234)"
                 value={newVehicle.number}
-                onChange={e => setNewVehicle({...newVehicle, number: e.target.value})}
+                onChange={e => setNewVehicle({ ...newVehicle, number: e.target.value })}
                 className="w-full px-6 py-5 bg-gray-50 border border-transparent rounded-[2rem] text-xs font-bold focus:outline-none focus:bg-white focus:border-black transition-all"
               />
-              <button 
-                type="submit" 
+              <button
+                type="submit"
                 disabled={isAddingVehicle}
                 className="w-full py-5 bg-black text-white text-[10px] font-black uppercase tracking-[0.2em] rounded-[2rem] shadow-xl shadow-gray-200 active:scale-[0.98] transition-all disabled:bg-gray-400"
               >
@@ -270,9 +291,9 @@ function ProfilePage() {
             {/* License Section */}
             <div className="space-y-4">
               <label className="block text-[10px] font-black text-black uppercase tracking-widest px-1">1. Driving License</label>
-              <input 
-                type="text" 
-                placeholder="License ID Number" 
+              <input
+                type="text"
+                placeholder="License ID Number"
                 value={licenseNumber}
                 onChange={e => setLicenseNumber(e.target.value)}
                 className="w-full px-6 py-4 bg-gray-50 border border-transparent rounded-2xl text-xs font-bold focus:outline-none focus:bg-white focus:border-black transition-all"
@@ -320,7 +341,7 @@ function ProfilePage() {
             </div>
           </div>
 
-          <button 
+          <button
             onClick={handleKYCSubmit}
             disabled={isSubmittingKYC}
             className="w-full py-6 bg-black text-white text-[11px] font-black uppercase tracking-[0.3em] rounded-[2.5rem] shadow-2xl shadow-gray-200 active:scale-[0.98] transition-all disabled:bg-gray-400 mt-6"
@@ -331,12 +352,12 @@ function ProfilePage() {
 
         {/* Bottom Actions */}
         <div className="pt-10 border-t border-gray-50">
-            <button 
-                onClick={() => { localStorage.clear(); navigate('/'); }} 
-                className="w-full py-6 border border-black rounded-[2.5rem] text-[10px] font-black uppercase tracking-[0.2em] text-black hover:bg-black hover:text-white transition-all active:scale-95 shadow-sm"
-            >
-                Log out
-            </button>
+          <button
+            onClick={() => { localStorage.clear(); navigate('/'); }}
+            className="w-full py-6 border border-black rounded-[2.5rem] text-[10px] font-black uppercase tracking-[0.2em] text-black hover:bg-black hover:text-white transition-all active:scale-95 shadow-sm"
+          >
+            Log out
+          </button>
         </div>
       </div>
     </div>
