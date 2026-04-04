@@ -76,7 +76,7 @@ const AdminUsersPage = () => {
 
                             <div className="flex items-center gap-4">
                                 <div className="w-14 h-14 bg-black text-white rounded-2xl flex items-center justify-center text-xl font-black shadow-lg shadow-gray-200">
-                                    {user.name ? user.name[0].upper() : user.username ? user.username[0].upper() : 'U'}
+                                    {user?.name?.charAt(0)?.toUpperCase() || user?.username?.charAt(0)?.toUpperCase() || 'U'}
                                 </div>
                                 <div className="flex-1">
                                     <h3 className="text-sm font-black text-black leading-tight tracking-tight">{user.name || user.username}</h3>

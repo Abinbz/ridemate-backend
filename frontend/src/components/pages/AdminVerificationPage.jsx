@@ -69,7 +69,7 @@ const AdminVerificationPage = () => {
                             <div className="flex justify-between items-start mb-6">
                                 <div className="flex items-center gap-4">
                                     <div className="w-12 h-12 bg-black text-white rounded-2xl flex items-center justify-center text-lg font-black shadow-lg shadow-gray-200 group-hover:scale-110 transition-transform duration-500">
-                                        {v.userName ? v.userName[0].upper() : 'U'}
+                                        {v?.userName?.charAt(0)?.toUpperCase() || 'U'}
                                     </div>
                                     <div>
                                         <h3 className="text-sm font-black text-black leading-none uppercase tracking-tight">{v.userName || 'Anonymous Entity'}</h3>

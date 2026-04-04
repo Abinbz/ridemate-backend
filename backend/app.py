@@ -10,8 +10,7 @@ from pymongo import MongoClient
 import re
 import random
 import math
-import cloudinary
-import cloudinary.uploader
+# Cloudinary logic moved to frontend (unsigned upload)
 
 # Haversine formula to calculate distance in km given lat/lng pairs
 def calculate_distance(lat1, lon1, lat2, lon2):
@@ -148,12 +147,7 @@ try:
 except Exception as e:
     print(f"MongoDB connection failed. Check if service is running: {e}")
 
-# --- Cloudinary Configuration ---
-cloudinary.config(
-  cloud_name=os.environ.get("CLOUDINARY_CLOUD_NAME", "dqt6eodgr"),
-  api_key=os.environ.get("CLOUDINARY_API_KEY", "299847286336454"),
-  api_secret=os.environ.get("CLOUDINARY_API_SECRET", "Zbrn6klBPpmwbAxLEoaUMyUGPZM")
-)
+# --- Backend no longer handles Cloudinary uploads ---
 
 
 # Helper function to convert ObjectIds to strings in dictionaries for jsonify
@@ -1607,10 +1601,23 @@ def admin_get_reports():
 
 @app.route("/api/user/verification/<user_id>", methods=["GET", "OPTIONS"])
 def get_user_verification(user_id):
+    """Retrieves document status directly from the user document."""
     try:
-        verif = verifications_col.find_one({"userId": user_id})
-        if verif:
-            return jsonify({"success": True, "verification": parse_json(verif)}), 200
+        user = users_col.find_one({"_id": ObjectId(user_id) if ObjectId.is_valid(user_id) else user_id})
+        if user and user.get("documents"):
+            # Flatten for frontend compatibility with existing UserVerificationPage
+            docs = user["documents"]
+            
+            # Map nested structure back to flat structure for the frontend logic if needed,
+            # but UserVerificationPage only uses .status
+            verif_data = {
+                "userId": user_id,
+                "status": docs.get("license", {}).get("status", "pending"),
+                "licenseUrl": docs.get("license", {}).get("url"),
+                "rcUrl": docs.get("rc", {}).get("url"),
+                "insuranceUrl": docs.get("insurance", {}).get("url")
+            }
+            return jsonify({"success": True, "verification": parse_json(verif_data)}), 200
         else:
             return jsonify({"success": True, "verification": None}), 200
     except Exception as e:
@@ -1774,32 +1781,35 @@ def get_ride_details(ride_id):
 def admin_get_verifications():
     try:
         # Join verifications with user names
+        # Aggregating KYC documents from users collection
         pipeline = [
-            {
-                "$lookup": {
-                    "from": "users",
-                    "let": { "userId": "$userId" },
-                    "pipeline": [
-                        { "$match": { "$expr": { "$eq": ["$_id", { "$toObjectId": "$$userId" }] } } }
-                    ],
-                    "as": "user"
-                }
-            },
-            { "$unwind": { "path": "$user", "preserveNullAndEmptyArrays": True } },
+            { "$match": { "documents": { "$exists": True } } },
             {
                 "$project": {
-                    "_id": 1,
-                    "userId": 1,
-                    "licenseUrl": 1,
-                    "rcUrl": 1,
-                    "insuranceUrl": 1,
-                    "status": 1,
-                    "userName": "$user.name",
-                    "userEmail": "$user.email"
+                    "_id": 0,
+                    "userId": { "$toString": "$_id" },
+                    "userName": "$name",
+                    "userEmail": "$email",
+                    "licenseUrl": "$documents.license.url",
+                    "rcUrl": "$documents.rc.url",
+                    "insuranceUrl": "$documents.insurance.url",
+                    "status": {
+                        "$cond": {
+                            "if": { "$eq": ["$documents.license.status", "approved"] },
+                            "then": "approved",
+                            "else": {
+                                "$cond": {
+                                    "if": { "$eq": ["$documents.license.status", "rejected"] },
+                                    "then": "rejected",
+                                    "else": "pending"
+                                }
+                            }
+                        }
+                    }
                 }
             }
         ]
-        results = list(verifications_col.aggregate(pipeline))
+        results = list(users_col.aggregate(pipeline))
         return jsonify({"success": True, "verifications": parse_json(results)}), 200
     except Exception as e:
         print(f"Admin Get Verifications Error: {e}")
@@ -1808,13 +1818,24 @@ def admin_get_verifications():
 @app.route("/api/admin/verify/<user_id>", methods=["POST", "OPTIONS"])
 def admin_approve_verification(user_id):
     try:
-        verifications_col.update_one(
-            {"userId": ObjectId(user_id) if ObjectId.is_valid(user_id) else user_id},
-            {"$set": {"status": "approved"}}
-        )
+        # Update user's isVerified flag and document statuses
+        uid = ObjectId(user_id) if ObjectId.is_valid(user_id) else user_id
         users_col.update_one(
-            {"_id": ObjectId(user_id) if ObjectId.is_valid(user_id) else user_id},
-            {"$set": {"isVerified": True}}
+            {"_id": uid},
+            {
+                "$set": {
+                    "isVerified": True,
+                    "documents.license.status": "approved",
+                    "documents.rc.status": "approved",
+                    "documents.insurance.status": "approved"
+                }
+            }
+        )
+        
+        # Keep verifications_col in sync if it's still being used elsewhere
+        verifications_col.update_one(
+            {"userId": user_id},
+            {"$set": {"status": "approved"}}
         )
         
         # Notify User
@@ -1836,8 +1857,21 @@ def admin_approve_verification(user_id):
 @app.route("/api/admin/reject/<user_id>", methods=["POST", "OPTIONS"])
 def admin_reject_verification(user_id):
     try:
+        # Update user's document statuses to rejected
+        uid = ObjectId(user_id) if ObjectId.is_valid(user_id) else user_id
+        users_col.update_one(
+            {"_id": uid},
+            {
+                "$set": {
+                    "documents.license.status": "rejected",
+                    "documents.rc.status": "rejected",
+                    "documents.insurance.status": "rejected"
+                }
+            }
+        )
+
         verifications_col.update_one(
-            {"userId": ObjectId(user_id) if ObjectId.is_valid(user_id) else user_id},
+            {"userId": user_id},
             {"$set": {"status": "rejected"}}
         )
         
@@ -1859,58 +1893,38 @@ def admin_reject_verification(user_id):
 
 @app.route("/api/upload-documents", methods=["POST", "OPTIONS"])
 def user_upload_documents():
+    """Recieves the Cloudinary URL from the frontend and updates the user record."""
     try:
-        user_id = request.form.get('userId')
-        if not user_id:
-            return jsonify({"success": False, "message": "Missing userId"}), 400
-        
-        # Get files from request
-        license_file = request.files.get('license')
-        rc_file = request.files.get('rc')
-        insurance_file = request.files.get('insurance')
-        
-        if not all([license_file, rc_file, insurance_file]):
-            return jsonify({"success": False, "message": "All 3 documents (License, RC, Insurance) are required"}), 400
-            
-        # Upload to Cloudinary
-        # We use a preset if available, but ensure it exists. 
-        # If 'Invalid signature' persists, check Cloudinary clock sync or signed/unsigned mismatch.
-        upload_options = {
-            "folder": f"ridemate/kyc/{user_id}",
-            "resource_type": "auto"
-        }
-        
-        # User requested support for unsigned/signed. We'll try signed first as we have the secret.
-        # If 'ridemate_unsigned' is strictly required by the client dashboard:
-        # upload_options["upload_preset"] = "ridemate_unsigned"
-        
-        print(f"DEBUG: Uploading documents for user {user_id}...")
-        
-        license_result = cloudinary.uploader.upload(license_file, **upload_options)
-        rc_result = cloudinary.uploader.upload(rc_file, **upload_options)
-        insurance_result = cloudinary.uploader.upload(insurance_file, **upload_options)
-        
-        print(f"DEBUG: Cloudinary Success - License: {license_result.get('secure_url')}")
-        
-        doc_entry = {
-            "userId": ObjectId(user_id) if ObjectId.is_valid(user_id) else user_id,
-            "licenseUrl": license_result.get("secure_url"),
-            "rcUrl": rc_result.get("secure_url"),
-            "insuranceUrl": insurance_result.get("secure_url"),
-            "status": "pending",
-            "createdAt": datetime.now()
-        }
-        
-        # Upsert verification record
-        verifications_col.update_one(
-            {"userId": doc_entry["userId"]},
-            {"$set": doc_entry},
-            upsert=True
+        data = safe_json()
+        user_id = data.get("userId")
+        doc_type = data.get("type") # license, rc, or insurance
+        file_url = data.get("fileUrl")
+
+        print(f"DEBUG: Incoming document upload: {user_id}, {doc_type}, {file_url}")
+
+        if not user_id or not doc_type or not file_url:
+            return jsonify({"success": False, "message": "Missing necessary document data"}), 400
+
+        # Update MongoDB with nested document structure
+        uid = ObjectId(user_id) if ObjectId.is_valid(user_id) else user_id
+        result = users_col.update_one(
+            {"_id": uid},
+            {"$set": {
+                f"documents.{doc_type}": {
+                    "url": file_url,
+                    "status": "pending",
+                    "reason": "",
+                    "updatedAt": datetime.now()
+                }
+            }}
         )
-        
-        # Notify Admin
-        user = users_col.find_one({"_id": doc_entry["userId"]})
-        u_name = user.get('name') or user.get('username', 'Someone')
+
+        if result.matched_count == 0:
+            return jsonify({"success": False, "message": "User not found"}), 404
+
+        # Notify Admins about the new document submission
+        user = users_col.find_one({"_id": uid})
+        u_name = user.get('name') or user.get('username') or 'User'
         
         admins = list(users_col.find({"role": "admin"}))
         for admin in admins:
@@ -1918,17 +1932,18 @@ def user_upload_documents():
                 "userId": str(admin["_id"]),
                 "fromId": user_id,
                 "type": "admin_alert",
-                "title": "KYC Submission",
-                "message": f"{u_name} uploaded documents for review",
+                "title": "Document Verification Required",
+                "message": f"{u_name} has submitted a new {doc_type} for review.",
                 "isRead": False,
                 "createdAt": datetime.now()
             })
             send_push_notification(str(admin["_id"]), "KYC Submission", f"{u_name} uploaded documents for review.", {"type": "admin_alert"})
-        
-        return jsonify({"success": True, "message": "Documents uploaded successfully to cloud"}), 200
+
+        return jsonify({"success": True, "message": f"{doc_type.capitalize()} uploaded"}), 200
+
     except Exception as e:
-        print(f"Cloudinary Upload Error: {e}")
-        return jsonify({"success": False, "message": f"Upload failure: {str(e)}"}), 500
+        print(f"Upload Docs Error: {e}")
+        return jsonify({"success": False, "message": str(e)}), 500
 
 @app.route("/api/upload", methods=["POST", "OPTIONS"])
 def upload_file():

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../../context/ToastContext';
 import { API_BASE_URL } from '../../config/api';
+import { uploadToCloudinary } from '../../utils/cloudinary';
 
 const UserVerificationPage = () => {
     const navigate = useNavigate();
@@ -54,31 +55,49 @@ const UserVerificationPage = () => {
             return;
         }
 
-        setLoading(true);
-        const formData = new FormData();
-        const userId = localStorage.getItem('userId');
-        formData.append('userId', userId);
-        formData.append('license', files.license);
-        formData.append('rc', files.rc);
-        formData.append('insurance', files.insurance);
-
-        const url = `${API_BASE_URL}/api/upload-documents`;
-        console.log("API CALL:", url, 'POST');
         try {
-            const response = await fetch(url, {
-                method: 'POST',
-                body: formData,
-            });
+            const userId = localStorage.getItem('userId');
+            
+            // Local array to track upload success
+            const docTypes = ['license', 'rc', 'insurance'];
+            
+            for (const type of docTypes) {
+                const file = files[type];
+                if (!file) continue;
 
-            const data = await response.json();
-            if (data.success) {
-                showToast('Documents uploaded successfully!', 'success');
-                setStatus('pending');
-            } else {
-                showToast(data.message || 'Upload failed.', 'error');
+                console.log(`[KYC] Uploading ${type} to Cloudinary...`);
+                const secureUrl = await uploadToCloudinary(file);
+                console.log(`[KYC] Cloudinary URL for ${type}:`, secureUrl);
+
+                // Send to backend
+                const fetchBody = {
+                    userId: userId,
+                    type: type,
+                    fileUrl: secureUrl
+                };
+                
+                const fetchUrl = `${API_BASE_URL}/api/upload-documents`;
+                console.log("FETCH BODY:", fetchBody);
+                console.log("API URL:", fetchUrl);
+
+                const response = await fetch(fetchUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(fetchBody),
+                });
+
+                const result = await response.json();
+                if (!result.success) {
+                    throw new Error(result.message || `Failed to save ${type} to backend`);
+                }
+                console.log(`[KYC] Backend response for ${type}:`, result);
             }
+
+            showToast('All documents uploaded successfully!', 'success');
+            setStatus('pending');
         } catch (error) {
-            showToast(`Server error: ${error.message || 'Check connection'}`, 'error');
+            console.error('[KYC] Upload failed:', error);
+            showToast(`Upload failed: ${error.message}`, 'error');
         } finally {
             setLoading(false);
         }

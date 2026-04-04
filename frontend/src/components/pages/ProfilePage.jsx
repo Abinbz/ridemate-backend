@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useToast } from '../../context/ToastContext';
 import LoadingSpinner from '../shared/LoadingSpinner';
 import { API_BASE_URL } from '../../config/api';
+import { uploadToCloudinary } from '../../utils/cloudinary';
 
 function ProfilePage() {
   const navigate = useNavigate();
@@ -116,30 +117,50 @@ function ProfilePage() {
     setIsSubmittingKYC(true);
     try {
         const userId = localStorage.getItem('userId');
-        const formData = new FormData();
-        formData.append('userId', userId);
-        formData.append('license', licenseData.licenseFile);
-        formData.append('rc', vehicles[0].rcFile);
-        formData.append('insurance', vehicles[0].insuranceFile);
-        formData.append('licenseNumber', licenseData.licenseNumber);
-        formData.append('vehicleName', vehicles[0].vehicleName);
+        
+        // Define documents to upload: license, and first vehicle's rc/insurance
+        const kycDocs = [
+            { type: 'license', file: licenseData.licenseFile },
+            { type: 'rc', file: vehicles[0].rcFile },
+            { type: 'insurance', file: vehicles[0].insuranceFile }
+        ];
 
-        const url = `${API_BASE_URL}/api/upload-documents`;
-        console.log("API CALL:", url, 'POST');
-        const response = await fetch(url, {
-            method: 'POST',
-            body: formData
-        });
+        for (const doc of kycDocs) {
+            if (!doc.file) continue;
 
-        const data = await response.json();
-        if (data.success) {
-            showToast('Documents uploaded to cloud for verification!', 'success');
-            setUserData({ ...userData, isVerified: false });
-        } else {
-            showToast(data.message || 'Submission failed.', 'error');
+            console.log(`[Profile KYC] Uploading ${doc.type} to Cloudinary...`);
+            const fileUrl = await uploadToCloudinary(doc.file);
+            console.log(`[Profile KYC] Cloudinary URL for ${doc.type}:`, fileUrl);
+
+            // Send URL to backend
+            const fetchBody = {
+                userId: userId,
+                type: doc.type,
+                fileUrl: fileUrl
+            };
+            
+            const fetchUrl = `${API_BASE_URL}/api/upload-documents`;
+            console.log("FETCH BODY:", fetchBody);
+            console.log("API URL:", fetchUrl);
+
+            const response = await fetch(fetchUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(fetchBody)
+            });
+
+            const result = await response.json();
+            if (!result.success) {
+                throw new Error(result.message || `Mapping ${doc.type} failed`);
+            }
+            console.log(`[Profile KYC] Backend response for ${doc.type}:`, result);
         }
+
+        showToast('Documents uploaded successfully! Monitoring system for approval.', 'success');
+        setUserData({ ...userData, isVerified: false });
     } catch (error) {
-        showToast(`Server error: ${error.message || 'Check connection'}`, 'error');
+        console.error('[Profile KYC] Error:', error);
+        showToast(`Verification submission failed: ${error.message}`, 'error');
     } finally {
         setIsSubmittingKYC(false);
     }
