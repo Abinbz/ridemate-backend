@@ -2068,40 +2068,55 @@ def admin_reject_verification(user_id):
 
 @app.route('/api/upload-documents', methods=['POST', 'OPTIONS'])
 def user_upload_documents():
-    """Standardized document upload route as requested by the user."""
+    """Standardized document upload route as requested by the user, fixing 500 error."""
     try:
+        # Part 1: Full Debug Logging
         data = safe_json()
-        user_id = data.get("userId")
-        doc_type = data.get("type")   # license / rc / insurance
-        url = data.get("url") or data.get("fileUrl") # Standardized to 'url' as per request
+        print("📦 Incoming data:", data)
 
+        user_id = data.get('userId')
+        doc_type = data.get('type')   # license / rc / insurance
+        url = data.get('url') or data.get('fileUrl')
+
+        print("user_id:", user_id)
+        print("doc_type:", doc_type)
+        print("url:", url)
+
+        # Part 2: Validate Inputs STRICTLY
         if not user_id or not doc_type or not url:
-            return jsonify({"success": False, "message": "Missing fields"}), 400
+            print("❌ Missing fields detected.")
+            return jsonify({"error": "Missing fields"}), 400
 
-        # Part 1: Update field matching the requested structure
-        update_field = {
-            f"documents.{doc_type}": {
-                "url": url,
-                "status": "pending",
-                "uploadedAt": datetime.now()
-            }
-        }
+        # Part 3: Fix ObjectId Conversion
+        try:
+            user_object_id = ObjectId(user_id)
+        except Exception as e:
+            print("❌ ObjectId Error:", e)
+            return jsonify({"error": "Invalid userId"}), 400
 
-        # Part 2: Safely handle licenseNumber mapping if provided
-        lic_num = data.get("licenseNumber") or data.get("number")
-        if lic_num and doc_type == "license":
-            update_field["documents.license.number"] = lic_num
+        # Part 4: Ensure VALID doc_type
+        if doc_type not in ['license', 'rc', 'insurance']:
+            print(f"❌ Invalid doc_type: {doc_type}")
+            return jsonify({"error": "Invalid document type"}), 400
 
-        users_col.update_one(
-            {"_id": ObjectId(user_id)},
-            {"$set": update_field}
+        # Part 5: Fix Mongo Update
+        # Using dot notation to prevent overwriting existing document data
+        result = users_col.update_one(
+            {"_id": user_object_id},
+            {"$set": {
+                f"documents.{doc_type}": {
+                    "url": url,
+                    "status": "pending",
+                    "reason": "",
+                    "uploadedAt": datetime.utcnow()
+                }
+            }}
         )
 
-        # Part 3: Requested console logs
-        print(f"[UPLOAD] {doc_type} saved for user {user_id}")
+        print("Mongo update result:", result.raw_result)
 
-        # Part 4: Notify Admins
-        user = users_col.find_one({"_id": ObjectId(user_id)})
+        # Notify Admins (Maintained logic, but inside the try block)
+        user = users_col.find_one({"_id": user_object_id})
         u_name = user.get('name') or user.get('username') or 'User'
         admins = list(users_col.find({"role": "admin"}))
         for admin in admins:
@@ -2116,13 +2131,13 @@ def user_upload_documents():
             })
             send_push_notification(str(admin["_id"]), "KYC Submission", f"{u_name} uploaded {doc_type} for review.", {"type": "admin_alert"})
 
-        # Part 5: Success return structure
+        # Part 6: Return SUCCESS
         return jsonify({"success": True}), 200
 
     except Exception as e:
-        # Part 6: Standardized error logging
-        print("UPLOAD ERROR:", e)
-        return jsonify({"success": False, "message": "Server error"}), 500
+        # Part 7: FULL ERROR HANDLER
+        print("🔥 ERROR IN UPLOAD:", str(e))
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/api/upload", methods=["POST", "OPTIONS"])
 def upload_file():
