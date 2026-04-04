@@ -50,8 +50,9 @@ const UserVerificationPage = () => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        if (!files.license || !files.rc || !files.insurance) {
-            showToast('Please upload all required documents.', 'error');
+        // Relaxed validation: At least one document must be present
+        if (!files.license && !files.rc && !files.insurance) {
+            showToast('Upload at least one document to proceed', 'error');
             return;
         }
 
@@ -93,7 +94,7 @@ const UserVerificationPage = () => {
                 console.log(`[KYC] Backend response for ${type}:`, result);
             }
 
-            showToast('All documents uploaded successfully!', 'success');
+            showToast('Documents uploaded successfully!', 'success');
             setStatus('pending');
         } catch (error) {
             console.error('[KYC] Upload failed:', error);
@@ -155,6 +156,13 @@ const UserVerificationPage = () => {
             </header>
 
             <form onSubmit={handleSubmit} className="px-6 space-y-8 max-w-xl mx-auto">
+                <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 flex items-center gap-3">
+                    <span className="text-lg">ℹ️</span>
+                    <p className="text-[9px] font-bold text-gray-500 uppercase tracking-widest leading-relaxed">
+                        Upload at least one document to proceed. Full verification (Driver Role) requires all 3 documents to be approved.
+                    </p>
+                </div>
+
                 <div className="space-y-6">
                     {[
                         { id: 'license', label: 'Driving License', sub: 'Front view focus' },
