@@ -61,7 +61,7 @@ function RideDetailsPage() {
       return;
     }
 
-    if (ride.status !== 'Scheduled' && ride.status !== 'Upcoming') {
+    if (ride.status !== 'upcoming') {
       showToast('This ride has already started or is completed.', 'error');
       return;
     }
@@ -110,7 +110,7 @@ function RideDetailsPage() {
   const isJoined = ride.bookedUsers?.includes(userId);
   const isDriver = (ride.driverId || ride.createdBy) === userId;
   const isBanned = userData?.isBanned;
-  const canJoin = (ride.status === 'Scheduled' || ride.status === 'Upcoming') && !isJoined && !isDriver && !isBanned;
+  const canJoin = (ride.status === 'upcoming') && !isJoined && !isDriver && !isBanned;
 
   return (
     <div className="min-h-screen bg-white pb-32">
@@ -124,7 +124,7 @@ function RideDetailsPage() {
         <div className="flex flex-col">
           <h1 className="text-sm font-black text-black uppercase tracking-widest leading-none">Ride Details</h1>
           <span className="text-[8px] font-black uppercase text-amber-500 tracking-widest mt-0.5">
-            {ride?.status?.toString() || "Scheduled"}
+            {ride?.status?.toString() || "upcoming"}
           </span>
         </div>
       </div>

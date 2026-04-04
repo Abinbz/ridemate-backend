@@ -438,7 +438,7 @@ function MyRideDetailsPage() {
               </button>
             </div>
 
-            {ride.status === 'Completed' && !ratedUserIds.includes(ride.driverId || ride.createdBy) && (
+            {ride.status === 'completed' && !ratedUserIds.includes(ride.driverId || ride.createdBy) && (
               <div className="bg-amber-50/30 p-8 rounded-[2.5rem] mt-4 animate-in slide-in-from-top-2 duration-400">
                 <h3 className="text-[11px] font-black text-black uppercase tracking-[0.2em] mb-6 flex items-center gap-3">
                    <div className="w-1.5 h-1.5 bg-amber-400 rounded-full animate-pulse"></div>
@@ -482,7 +482,7 @@ function MyRideDetailsPage() {
 
         {/* ── Action Buttons ── */}
         <div className="pt-8 space-y-4">
-          {isDriver && (ride.status === 'Scheduled' || ride.status === 'Upcoming' || ride.status === 'accepted') && (
+          {isDriver && (ride.status === 'upcoming' || ride.status === 'accepted') && (
             <button
               onClick={handleStartRide}
               className="w-full bg-black text-white py-5 rounded-[2rem] text-[10px] font-black uppercase tracking-[0.2em] shadow-lg shadow-black/10 hover:opacity-90 active:scale-[0.98] transition-all"
@@ -491,7 +491,7 @@ function MyRideDetailsPage() {
             </button>
           )}
 
-          {isDriver && (ride.status === 'Ongoing' || ride.status === 'ongoing') && (
+          {isDriver && (ride.status === 'ongoing') && (
             <button
               onClick={handleFinishRide}
               className="w-full bg-black text-white py-5 rounded-[2rem] text-[10px] font-black uppercase tracking-[0.2em] shadow-lg shadow-black/10 hover:opacity-90 active:scale-[0.98] transition-all"
@@ -502,10 +502,10 @@ function MyRideDetailsPage() {
 
           <button
             onClick={handleCancelRide}
-            disabled={cancelling || ride.status === 'Completed'}
+            disabled={cancelling || ride.status === 'completed'}
             className="w-full bg-white border-2 border-black text-black py-5 rounded-[2rem] text-[10px] font-black uppercase tracking-[0.2em] hover:bg-gray-50 active:scale-[0.98] transition-all disabled:opacity-30 disabled:grayscale"
           >
-            {cancelling ? 'Processing...' : ride.status === 'Completed' ? 'Ride Finished' : 'Cancel Ride'}
+            {cancelling ? 'Processing...' : ride.status === 'completed' ? 'Ride Finished' : 'Cancel Ride'}
           </button>
         </div>
 

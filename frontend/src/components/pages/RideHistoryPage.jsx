@@ -66,13 +66,10 @@ function RideHistoryPage() {
       }
 
       try {
-        console.log("API CALL:", `${API_BASE_URL}/api/ride-history`, 'POST');
-        const response = await fetch(`${API_BASE_URL}/api/ride-history`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId })
-        });
+        console.log("API CALL:", `${API_BASE_URL}/api/ride-history?userId=${userId}`);
+        const response = await fetch(`${API_BASE_URL}/api/ride-history?userId=${userId}`);
         const data = await response.json();
+        console.log("Ride history response:", data);
 
         if (response.ok && data.success) {
           setHistory({

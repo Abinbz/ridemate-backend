@@ -518,7 +518,7 @@ def post_ride():
             "capacity": data.get('passengers', 1),
             "passengerPreference": data.get('passengerPreference', 'Any'),
             "passengers": [], 
-            "status": "Scheduled",
+            "status": "upcoming",
             "createdAt": datetime.now(),
             "from": data.get('startingFrom'),
             "to": data.get('goingTo'),
@@ -550,7 +550,7 @@ def post_ride():
                 "capacity": data.get('passengers', 1),
                 "passengerPreference": data.get('passengerPreference', 'Any'),
                 "passengers": [], 
-                "status": "Scheduled",
+                "status": "upcoming",
                 "createdAt": datetime.now(),
                 "from": data.get('goingTo'),
                 "to": data.get('startingFrom'),
@@ -584,7 +584,7 @@ def search_rides():
 
     try:
         # Initial extraction of all possible rides
-        query = {}
+        query = {"status": "upcoming"}
         # Only add date to query if it's actually provided and not empty
         if data.get('date'):
             query["date"] = data.get('date')
@@ -718,7 +718,7 @@ def search_rides():
 def cluster_rides():
     try:
         # Fetch all rides
-        cursor = rides_col.find({})
+        cursor = rides_col.find({"status": "upcoming"})
         rides_list = []
         X = []
         
@@ -786,7 +786,7 @@ def match_rides():
     DETOUR_LIMIT = 2.0  # in kilometers
     
     try:
-        cursor = rides_col.find({})
+        cursor = rides_col.find({"status": "upcoming"})
         matched_rides = []
         
         for doc in cursor:
@@ -836,7 +836,7 @@ def optimize_rides():
         return jsonify({"success": False, "message": "Missing geographic attributes for GA evaluation."}), 400
         
     try:
-        cursor = rides_col.find({})
+        cursor = rides_col.find({"status": "upcoming"})
         matched_rides = []
         
         # 1. Establish initial population constraint natively mapped logically by Detour limit (2km)
@@ -989,10 +989,10 @@ def start_ride():
         if str(ride.get('driverId') or ride.get('createdBy')) != str(user_id):
             return jsonify({"success": False, "message": "Only the driver can start the ride"}), 403
 
-        if ride.get('status') != 'Scheduled':
+        if ride.get('status') != 'upcoming':
             return jsonify({"success": False, "message": "Only 'Scheduled' rides can be started"}), 400
             
-        rides_col.update_one({"_id": ObjectId(ride_id)}, {"$set": {"status": "Ongoing"}})
+        rides_col.update_one({"_id": ObjectId(ride_id)}, {"$set": {"status": "ongoing"}})
         
         # Notify passengers that ride has started
         route_str = f"{ride.get('from') or ride.get('fromLocation', '')} → {ride.get('to') or ride.get('toLocation', '')}"
@@ -1025,10 +1025,10 @@ def end_ride():
         if str(ride.get('driverId') or ride.get('createdBy')) != str(user_id):
             return jsonify({"success": False, "message": "Only the driver can end the ride"}), 403
 
-        if ride.get('status') != 'Ongoing':
+        if ride.get('status') != 'ongoing':
             return jsonify({"success": False, "message": "Only 'Ongoing' rides can be ended"}), 400
 
-        rides_col.update_one({"_id": ObjectId(ride_id)}, {"$set": {"status": "Completed"}})
+        rides_col.update_one({"_id": ObjectId(ride_id)}, {"$set": {"status": "completed"}})
         
         # Notify passengers that ride has ended
         route_str = f"{ride.get('from') or ride.get('fromLocation', '')} → {ride.get('to') or ride.get('toLocation', '')}"
@@ -1065,11 +1065,11 @@ def _normalize_ride(doc, role, current_date_str):
     ride["from"] = from_loc
     ride["to"] = to_loc
     
-    stored_status = ride.get("status", "Scheduled")
-    if stored_status == "Scheduled":
-        ride["status"] = "Upcoming"
+    stored_status = ride.get("status", "upcoming")
+    if stored_status == "Scheduled" or stored_status == "Upcoming" or stored_status == "upcoming":
+        ride["status"] = "upcoming"
     else:
-        ride["status"] = stored_status
+        ride["status"] = stored_status.lower() if isinstance(stored_status, str) else stored_status
 
     vtype = ride.get("vehicleType", "Car")
     vname = ride.get("vehicleName", "Unknown")
@@ -1130,7 +1130,7 @@ def cancel_ride_passenger():
         if not ride:
             return jsonify({"success": False, "message": "Ride not found"}), 404
             
-        if ride.get('status') == 'Completed':
+        if ride.get('status') == 'completed':
             return jsonify({"success": False, "message": "Cannot cancel a completed ride"}), 400
             
         driver_id = ride.get('createdBy')
@@ -1240,10 +1240,9 @@ def get_my_rides():
     return get_my_rides_v2(user_id)
 
 
-@app.route("/api/ride-history", methods=["POST", "OPTIONS"])
+@app.route("/api/ride-history", methods=["GET", "OPTIONS"])
 def ride_history():
-    data = safe_json()
-    user_id = data.get('userId')
+    user_id = request.args.get('userId')
 
     if not user_id:
         return jsonify({"success": False, "message": "Missing userId"}), 400
@@ -1251,44 +1250,24 @@ def ride_history():
     try:
         current_date_str = datetime.now().strftime('%Y-%m-%d')
         
-        # Posted rides: rides created by this user that are in the past
-        posted_cursor = rides_col.find({
-            "createdBy": user_id,
-            "date": {"$lt": current_date_str}
-        })
+        # Consistent status check: "completed"
+        # 1. Posted rides (Driver)
+        # 2. Booked rides (Passenger)
+        
         posted_history = []
-        for doc in posted_cursor:
-            ride = parse_json(doc)
-            ride["id"] = ride.pop("_id", None)
-            ride["role"] = "Driver"
-            ride["status"] = "Completed"
-            # Normalize vehicle display
-            vtype = ride.get("vehicleType", "Car")
-            vname = ride.get("vehicleName", "Unknown")
-            ride["vehicle"] = f"{vtype} ({vname})"
-            # Normalize price display
-            price_val = ride.get("price", 0)
-            ride["price"] = f"₹{price_val}" if not str(price_val).startswith("₹") else str(price_val)
+        for doc in rides_col.find({
+            "$or": [{"driverId": user_id}, {"createdBy": user_id}],
+            "status": "completed"
+        }):
+            ride = _normalize_ride(doc, "Driver", current_date_str)
             posted_history.append(ride)
 
-        # Booked rides: rides where this user is in bookedUsers and are in the past
-        booked_cursor = rides_col.find({
-            "bookedUsers": user_id,
-            "date": {"$lt": current_date_str}
-        })
         booked_history = []
-        for doc in booked_cursor:
-            ride = parse_json(doc)
-            ride["id"] = ride.pop("_id", None)
-            ride["role"] = "Passenger"
-            ride["status"] = "Completed"
-            # Normalize vehicle display
-            vtype = ride.get("vehicleType", "Car")
-            vname = ride.get("vehicleName", "Unknown")
-            ride["vehicle"] = f"{vtype} ({vname})"
-            # Normalize price display
-            price_val = ride.get("price", 0)
-            ride["price"] = f"₹{price_val}" if not str(price_val).startswith("₹") else str(price_val)
+        for doc in rides_col.find({
+            "$or": [{"bookedUsers": user_id}, {"passengers.userId": user_id}],
+            "status": "completed"
+        }):
+            ride = _normalize_ride(doc, "Passenger", current_date_str)
             booked_history.append(ride)
 
         print(f"Ride History for {user_id}: {len(posted_history)} posted, {len(booked_history)} booked")
