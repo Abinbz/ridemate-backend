@@ -136,7 +136,8 @@ function ProfilePage() {
       return;
     }
     
-    if (!licenseNumber) {
+    // User requested fix: License Number only required if License is uploaded
+    if (docUrls.license && !licenseNumber) {
       showToast('Please enter your license number.', 'error');
       return;
     }
@@ -176,6 +177,12 @@ function ProfilePage() {
   if (loading || !userData) {
     return <div className="min-h-screen bg-white"><LoadingSpinner /></div>;
   }
+
+  // Phase 3: Driver Eligibility Logic
+  const canBecomeDriver = 
+    userData.documents?.license?.status === 'approved' &&
+    userData.documents?.rc?.status === 'approved' &&
+    userData.documents?.insurance?.status === 'approved';
 
   return (
     <div className="min-h-screen bg-white pb-24">
@@ -279,6 +286,86 @@ function ProfilePage() {
             </form>
           )}
         </section>
+        <hr className="border-gray-50 my-6" />
+
+        {/* My Documents Display Section */}
+        <section className="space-y-6">
+          <div className="flex items-end justify-between px-1">
+            <div className="flex flex-col gap-1">
+              <h3 className="text-[10px] font-black text-gray-300 uppercase tracking-[0.2em]">Validated Assets</h3>
+              <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">My Documents Terminal</p>
+            </div>
+            {canBecomeDriver && (
+              <div className="flex items-center gap-2 bg-emerald-50 px-3 py-1.5 rounded-full border border-emerald-100 animate-bounce">
+                <span className="text-[10px]">🎖️</span>
+                <p className="text-[8px] font-black text-emerald-600 uppercase tracking-widest">Driver Grade Active</p>
+              </div>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {[
+              { id: 'license', label: 'Driving License', icon: '🪪' },
+              { id: 'rc', label: 'Vehicle RC', icon: '📄' },
+              { id: 'insurance', label: 'Insurance Policy', icon: '🛡️' }
+            ].map((doc) => {
+              const savedDoc = userData.documents?.[doc.id];
+              return (
+                <div key={doc.id} className="bg-white border border-gray-100 rounded-[2rem] p-4 flex flex-col gap-4 shadow-sm hover:shadow-md transition-all">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm">{doc.icon}</span>
+                      <p className="text-[9px] font-black text-black uppercase tracking-tight">{doc.label}</p>
+                    </div>
+                    {savedDoc && (
+                      <span className={`text-[7px] font-black uppercase px-2 py-0.5 rounded-full flex items-center gap-1 ${
+                        savedDoc.status === 'approved' ? 'bg-emerald-50 text-emerald-500' :
+                        savedDoc.status === 'rejected' ? 'bg-red-50 text-red-500' : 'bg-amber-50 text-amber-500'
+                      }`}>
+                        {savedDoc.status === 'approved' ? '✔' : savedDoc.status === 'rejected' ? '❌' : '⏳'}
+                        {savedDoc.status || 'Pending'}
+                      </span>
+                    )}
+                  </div>
+
+                  {savedDoc?.url ? (
+                    <div className="relative group aspect-square rounded-[1.5rem] overflow-hidden bg-gray-50 border border-gray-100">
+                      <img src={savedDoc.url} alt={doc.label} className="w-full h-full object-cover" />
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center p-4">
+                        <button 
+                          onClick={() => window.open(savedDoc.url, '_blank')}
+                          className="bg-white text-black px-4 py-2 rounded-full text-[8px] font-black uppercase tracking-widest"
+                        >
+                          Show Full Rez
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="aspect-square rounded-[1.5rem] border-2 border-dashed border-gray-50 flex flex-col items-center justify-center bg-gray-50/30 text-center px-4">
+                      <p className="text-[8px] font-black text-gray-300 uppercase tracking-widest leading-none">NO DATA FOUND</p>
+                    </div>
+                  )}
+
+                  {/* Phase 3: Rejection Reason Display */}
+                  {savedDoc?.status === 'rejected' && savedDoc?.reason && (
+                    <div className="bg-red-50 p-3 rounded-2xl border border-red-100">
+                       <p className="text-[7px] font-bold text-red-400 uppercase tracking-widest leading-none mb-1">Moderator Intel</p>
+                       <p className="text-[9px] font-black text-red-600 uppercase tracking-tight leading-relaxed">{savedDoc.reason}</p>
+                    </div>
+                  )}
+
+                  {doc.id === 'license' && savedDoc?.number && (
+                    <div className="bg-gray-50 px-3 py-2 rounded-xl">
+                      <p className="text-[7px] font-bold text-gray-400 uppercase tracking-widest leading-none mb-1">LICENSE ID</p>
+                      <p className="text-[9px] font-black text-black uppercase tracking-tight">{savedDoc.number}</p>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+        <hr className="border-gray-50 my-6" />
 
         {/* Structured Document Upload */}
         <section className="space-y-6">
