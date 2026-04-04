@@ -60,11 +60,9 @@ function PostPage() {
     returnPrice: ''
   });
 
-  const [startCoords, setStartCoords] = useState(null);
-  const [endCoords, setEndCoords] = useState(null);
-  const [routeData, setRouteData] = useState([]);
   const [distance, setDistance] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [userData, setUserData] = useState(null);
 
   const getMapCenter = () => {
     if (startCoords && isValidCoords(startCoords[0], startCoords[1])) return startCoords;
@@ -86,9 +84,13 @@ function PostPage() {
             const data = await response.json();
             
             if (data.success) {
-                if (!data.user.isDriver) {
-                    alert("🚫 ACCESS DENIED\n\nYou must be a verified driver to offer rides. Please complete your profile verification and ensure all documents are approved.");
-                    navigate('/user/home');
+                setUserData(data.user);
+                const userRoles = data.user.roles || [];
+                const isDriver = userRoles.includes("driver");
+
+                if (!isDriver) {
+                    // Part 4: Show alert for non-drivers
+                    console.log("🔒 Access Blocked: User not in Driver Role.");
                 }
             }
         } catch (error) {
@@ -249,14 +251,32 @@ function PostPage() {
     }
   };
 
+  // Part 4: Frontend - Lock Offer Ride
+  const userRoles = userData?.roles || [];
+  const isDriver = userRoles.includes("driver");
+
   return (
-    <div className="min-h-screen bg-white px-6 py-12 pb-24">
-      <div className="max-w-xl mx-auto space-y-12">
-        <div className="text-center">
-          <h1 className="text-3xl font-black tracking-tighter text-black uppercase leading-none">Post a Ride</h1>
-          <p className="text-[10px] font-bold text-gray-300 uppercase tracking-[0.2em] mt-3 italic">
-            Share your journey. Split the cost.
-          </p>
+    <div className="min-h-screen bg-white">
+      <div className="max-w-7xl mx-auto px-6 py-12 pb-32">
+        <header className="flex flex-col gap-1 mb-12">
+          <h1 className="text-4xl font-black uppercase tracking-tighter text-black">Offer a Ride</h1>
+          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.4em]">Strategic Route Deployment</p>
+        </header>
+
+        {/* Locked UI for non-drivers */}
+        {!isDriver && (
+          <div className="bg-red-50 p-8 rounded-[2.5rem] border border-red-100 flex flex-col items-center text-center gap-4 mb-20 animate-in fade-in zoom-in duration-500">
+            <div className="w-16 h-16 bg-white rounded-3xl flex items-center justify-center text-2xl shadow-sm">🔒</div>
+            <div className="space-y-1">
+              <p className="text-sm font-black text-black uppercase tracking-tight">Security Lockdown</p>
+              <p className="text-[10px] font-bold text-red-600 uppercase tracking-widest max-w-[280px]">
+                You must complete your document verification to offer rides on this platform.
+              </p>
+            </div>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-16">
         </div>
 
         {/* Preview Map */}
@@ -484,13 +504,14 @@ function PostPage() {
             )}
           </section>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-5 bg-black text-white rounded-[2rem] text-[10px] font-black uppercase tracking-[0.2em] hover:bg-gray-900 active:scale-[0.98] transition-all disabled:bg-gray-200 mt-6"
-          >
-            {loading ? 'Processing...' : 'Post Ride Now'}
-          </button>
+                <button
+                  type="submit"
+                  disabled={loading || !isDriver}
+                  className={`w-full py-6 rounded-[2rem] text-[11px] font-black uppercase tracking-[0.3em] transition-all flex items-center justify-center gap-3
+                    ${loading || !isDriver ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-black text-white shadow-2xl shadow-gray-200 active:scale-[0.98]'}`}
+                >
+                  {loading ? 'Initializing Route...' : isDriver ? 'Post Ride' : 'Verification Required'}
+                </button>
         </form>
       </div>
     </div>

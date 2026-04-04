@@ -474,12 +474,17 @@ def post_ride():
         return jsonify({"success": False, "message": "Missing route details"}), 400
         
     try:
-        # Strict Eligibility Check: Must be a verified driver
+        # Strict Eligibility Check: Must have the "driver" role
         user = users_col.find_one({"_id": ObjectId(user_id)})
-        if not user or not user.get("isDriver"):
+        
+        # User requested fix: Use roles system
+        roles = user.get("roles", [])
+        if "driver" not in roles:
+             # Part 4: Add console log for blocked ride
+             print(f"[RIDE BLOCKED] User not driver: {user_id}")
              return jsonify({
                  "success": False, 
-                 "message": "Only verified drivers can post rides. Please complete verification."
+                 "message": "You are not authorized to post rides. Complete verification to become a driver."
              }), 403
 
         # User requested standardization and logging
@@ -1649,13 +1654,12 @@ def verify_user_decision():
                     "message": "Strict Eligibility Failed: All 3 documents (License, RC, Insurance) must be approved to promote as a driver."
                 }), 400
 
+            # User requested fix: Implement roles + driver control
             users_col.update_one(
                 {"_id": ObjectId(user_id)},
                 {
-                    "$set": {
-                        "role": "user_driver",
-                        "isDriver": True
-                    }
+                    "$addToSet": { "roles": "driver" },
+                    "$set": { "isDriver": True }
                 }
             )
 
