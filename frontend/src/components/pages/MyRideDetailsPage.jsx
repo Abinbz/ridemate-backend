@@ -35,25 +35,28 @@ function MyRideDetailsPage() {
   const [reportDetails, setReportDetails] = useState('');
   const [reporting, setReporting] = useState(false);
 
-  useEffect(() => {
-    const fetchRide = async () => {
-      const rideId = ride?.id || ride?._id || location.state?.rideId;
-      if (!rideId) return;
+  const currentUserId = localStorage.getItem('userId');
+  const isDriver = ride ? (ride.driverId || ride.createdBy) === currentUserId : false;
 
-      try {
-        console.log("API CALL:", `${API_BASE_URL}/api/ride/${rideId}`);
-        const response = await fetch(`${API_BASE_URL}/api/ride/${rideId}`);
-        const data = await response.json();
-        if (response.ok && data.success) {
-          setRide(data.ride);
-        }
-      } catch (err) {
-        console.error('Error fetching ride details:', err);
-      } finally {
-        setLoading(false);
+  const fetchRide = async () => {
+    const rideId = ride?.id || ride?._id || location.state?.rideId;
+    if (!rideId) return;
+
+    try {
+      console.log("API CALL:", `${API_BASE_URL}/api/ride/${rideId}`);
+      const response = await fetch(`${API_BASE_URL}/api/ride/${rideId}`);
+      const data = await response.json();
+      if (response.ok && data.success) {
+        setRide(prev => ({ ...data.ride, role: prev?.role || data.ride.role }));
       }
-    };
+    } catch (err) {
+      console.error('Error fetching ride details:', err);
+    } finally {
+      if (loading) setLoading(false);
+    }
+  };
 
+  useEffect(() => {
     fetchRide();
     const interval = setInterval(fetchRide, 10000);
     return () => clearInterval(interval);
@@ -141,19 +144,18 @@ function MyRideDetailsPage() {
   };
 
   const handleStartRide = async () => {
-    const userId = localStorage.getItem('userId');
     const rideId = ride.id || ride._id;
     try {
       console.log("API CALL:", `${API_BASE_URL}/api/start-ride`);
       const response = await fetch(`${API_BASE_URL}/api/start-ride`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rideId, userId })
+        body: JSON.stringify({ rideId, userId: currentUserId })
       });
       const data = await response.json();
       if (response.ok && data.success) {
         showToast("Ride started!", "success");
-        navigate('/user/home', { state: { activeTab: 'my-rides' } });
+        await fetchRide();
       } else {
         showToast(data.message || "Failed to start ride", "error");
       }
@@ -162,22 +164,21 @@ function MyRideDetailsPage() {
     }
   };
 
-  const handleEndRide = async () => {
-    const userId = localStorage.getItem('userId');
+  const handleFinishRide = async () => {
     const rideId = ride.id || ride._id;
     try {
       console.log("API CALL:", `${API_BASE_URL}/api/end-ride`);
       const response = await fetch(`${API_BASE_URL}/api/end-ride`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rideId, userId })
+        body: JSON.stringify({ rideId, userId: currentUserId })
       });
       const data = await response.json();
       if (response.ok && data.success) {
         showToast("Ride completed!", "success");
-        navigate('/user/home', { state: { activeTab: 'my-rides' } });
+        await fetchRide();
       } else {
-        showToast(data.message || "Failed to end ride", "error");
+        showToast(data.message || "Failed to finish ride", "error");
       }
     } catch (err) {
       showToast(`Connection error: ${err.message}`, "error");
@@ -481,7 +482,7 @@ function MyRideDetailsPage() {
 
         {/* ── Action Buttons ── */}
         <div className="pt-8 space-y-4">
-          {ride.role === 'Driver' && (ride.status === 'Scheduled' || ride.status === 'Upcoming') && (
+          {isDriver && (ride.status === 'Scheduled' || ride.status === 'Upcoming' || ride.status === 'accepted') && (
             <button
               onClick={handleStartRide}
               className="w-full bg-black text-white py-5 rounded-[2rem] text-[10px] font-black uppercase tracking-[0.2em] shadow-lg shadow-black/10 hover:opacity-90 active:scale-[0.98] transition-all"
@@ -490,12 +491,12 @@ function MyRideDetailsPage() {
             </button>
           )}
 
-          {ride.role === 'Driver' && ride.status === 'Ongoing' && (
+          {isDriver && (ride.status === 'Ongoing' || ride.status === 'ongoing') && (
             <button
-              onClick={handleEndRide}
+              onClick={handleFinishRide}
               className="w-full bg-black text-white py-5 rounded-[2rem] text-[10px] font-black uppercase tracking-[0.2em] shadow-lg shadow-black/10 hover:opacity-90 active:scale-[0.98] transition-all"
             >
-              End Ride
+              Finish Ride
             </button>
           )}
 
