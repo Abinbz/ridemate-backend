@@ -1390,6 +1390,7 @@ def mark_messages_read():
 
 @app.route("/api/notifications/<user_id>", methods=["GET", "OPTIONS"])
 def get_notifications(user_id):
+    """Consolidated notifications route: returns list and unread count."""
     try:
         cursor = notifications_col.find(
             {"userId": user_id}
@@ -1398,7 +1399,10 @@ def get_notifications(user_id):
         notifs = []
         for doc in cursor:
             n = parse_json(doc)
-            n["id"] = n.pop("_id", None)
+            # Ensure both id formats exist for compatibility across components
+            n["_id"] = n.get("_id")
+            if "_id" in n:
+                n["id"] = n["_id"]
             notifs.append(n)
         
         unread_count = notifications_col.count_documents({"userId": user_id, "isRead": False})
@@ -1410,7 +1414,7 @@ def get_notifications(user_id):
         }), 200
     except Exception as e:
         print(f"Get Notifications Error: {e}")
-        return jsonify({"success": False, "message": "Database error"}), 500
+        return jsonify({"success": False, "message": str(e)}), 500
 
 @app.route("/api/notifications/mark-read", methods=["POST", "OPTIONS"])
 def mark_notifications_read():
@@ -2129,16 +2133,6 @@ def user_upload_documents():
         # Part 7: FULL ERROR HANDLER
         print("🔥 ERROR IN UPLOAD:", str(e))
         return jsonify({"error": str(e)}), 500
-
-@app.route("/api/notifications/<user_id>", methods=["GET", "OPTIONS"])
-def get_notifications(user_id):
-    """Retrieves all notifications for a specific user, sorted by recency."""
-    try:
-        notifications = list(notifications_col.find({"userId": user_id}).sort("createdAt", -1))
-        return jsonify({"success": True, "notifications": parse_json(notifications)}), 200
-    except Exception as e:
-        print(f"Get Notifications Error: {e}")
-        return jsonify({"success": False, "message": str(e)}), 500
 
 @app.route("/api/notifications/read/<notif_id>", methods=["POST", "OPTIONS"])
 def mark_notification_read(notif_id):
