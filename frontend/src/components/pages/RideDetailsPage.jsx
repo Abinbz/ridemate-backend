@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useToast } from '../../context/ToastContext';
 import { API_BASE_URL } from '../../config/api';
@@ -8,7 +8,26 @@ function RideDetailsPage() {
   const location = useLocation();
   const { showToast } = useToast();
   const { ride } = location.state || {};
-  const [booking, setBooking] = useState(false);
+  const [userData, setUserData] = useState(null);
+  const userId = localStorage.getItem('userId');
+
+  // Part 4.5: Security - Monitor user status on mount
+  useEffect(() => {
+    if (userId) {
+      const fetchStatus = async () => {
+        try {
+          const res = await fetch(`${API_BASE_URL}/api/user/${userId}`);
+          const data = await res.json();
+          if (data.success) {
+            setUserData(data.user);
+          }
+        } catch (err) {
+          console.error("Status check failed:", err);
+        }
+      };
+      fetchStatus();
+    }
+  }, [userId]);
 
   if (!ride) {
     return (
@@ -25,12 +44,16 @@ function RideDetailsPage() {
   }
 
   const handleJoinRide = async () => {
-    const userId = localStorage.getItem('userId');
     const rideId = ride.id || ride._id;
 
     if (!userId) {
       showToast('Please log in to join a ride.', 'error');
       navigate('/');
+      return;
+    }
+
+    if (userData?.isBanned) {
+      showToast('Your account is restricted from joining rides.', 'error');
       return;
     }
 
@@ -77,9 +100,10 @@ function RideDetailsPage() {
     });
   };
 
-  const isJoined = ride.bookedUsers?.includes(localStorage.getItem('userId'));
-  const isDriver = (ride.driverId || ride.createdBy) === localStorage.getItem('userId');
-  const canJoin = (ride.status === 'Scheduled' || ride.status === 'Upcoming') && !isJoined && !isDriver;
+  const isJoined = ride.bookedUsers?.includes(userId);
+  const isDriver = (ride.driverId || ride.createdBy) === userId;
+  const isBanned = userData?.isBanned;
+  const canJoin = (ride.status === 'Scheduled' || ride.status === 'Upcoming') && !isJoined && !isDriver && !isBanned;
 
   return (
     <div className="min-h-screen bg-white pb-32">
@@ -184,10 +208,11 @@ function RideDetailsPage() {
         </button>
         <button
           onClick={handleJoinRide}
-          disabled={booking || !canJoin}
-          className="flex-[1.5] py-5 bg-black text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-gray-900 active:scale-[0.98] transition-all disabled:bg-gray-300 disabled:cursor-not-allowed"
+          disabled={booking || !canJoin || isBanned}
+          className={`flex-[1.5] py-5 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest active:scale-[0.98] transition-all
+            ${booking || !canJoin || isBanned ? 'bg-gray-300 cursor-not-allowed' : 'bg-black hover:bg-gray-900'}`}
         >
-          {booking ? 'Joining...' : isJoined ? 'Joined' : isDriver ? 'Your Ride' : canJoin ? 'Join Ride' : 'Closed'}
+          {booking ? 'Joining...' : isBanned ? 'Account Restricted' : isJoined ? 'Joined' : isDriver ? 'Your Ride' : canJoin ? 'Join Ride' : 'Closed'}
         </button>
       </div>
     </div>

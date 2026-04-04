@@ -930,6 +930,14 @@ def join_ride():
         if not user:
             return jsonify({"success": False, "message": "User not found"}), 404
 
+        # Part 4.5: Security - Block Banned Users from booking
+        if user.get("isBanned"):
+            print(f"[BOOKING BLOCKED] Banned user: {user_id}")
+            return jsonify({
+                "success": False, 
+                "message": "Your account is restricted from joining rides."
+            }), 403
+
         passenger_detail = {
             "userId": user_id,
             "name": user.get('name') or user.get('username', 'Unknown'),
