@@ -124,7 +124,7 @@ function RideDetailsPage() {
         <div className="flex flex-col">
           <h1 className="text-sm font-black text-black uppercase tracking-widest leading-none">Ride Details</h1>
           <span className="text-[8px] font-black uppercase text-amber-500 tracking-widest mt-0.5">
-            {typeof ride?.status === 'string' ? ride.status : "Scheduled"}
+            {ride?.status?.toString() || "Scheduled"}
           </span>
         </div>
       </div>
@@ -138,21 +138,19 @@ function RideDetailsPage() {
               <img src={ride.driver.avatar} alt="driver" className="w-full h-full object-cover" />
             ) : (
               <span>
-                {typeof ride?.driver === 'object' 
-                  ? (ride.driver?.name || ride.driver?.username || 'D')[0]?.toUpperCase()
-                  : (ride?.driver || 'D')[0]?.toUpperCase()}
+                {(ride?.driver?.name || ride?.driver?.username || (typeof ride?.driver === 'string' ? ride.driver : 'D'))[0]?.toUpperCase()}
               </span>
             )}
           </div>
           <h2 className="text-2xl font-black text-black leading-none mb-2">
-            {typeof ride?.driver === 'object' ? (ride.driver?.name || ride.driver?.username) : (ride?.driver || "Strategic Driver")}
+            {ride?.driver?.name || ride?.driver?.username || (typeof ride?.driver === 'string' ? ride.driver : "Strategic Driver")}
           </h2>
           <div className="flex items-center gap-2 px-4 py-1.5 bg-gray-50 rounded-full">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-black" fill="currentColor" viewBox="0 0 24 24">
               <path d="M12 .587l3.668 7.568 8.332 1.151-6.064 5.828 1.48 8.279-7.416-3.967-7.417 3.967 1.481-8.279-6.064-5.828 8.332-1.151z" />
             </svg>
             <span className="text-[10px] font-black text-black uppercase tracking-widest">
-              {(typeof ride?.driver === 'object' ? ride.driver?.rating : ride?.rating) || '5.0'} Rating
+              {ride?.driver?.rating || ride?.rating || '5.0'} Rating
             </span>
           </div>
         </section>
@@ -236,7 +234,7 @@ function RideDetailsPage() {
           <div>
             <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-2 leading-none">Total Fare</p>
             <h4 className="text-4xl font-black leading-none italic uppercase">
-              ₹{typeof ride?.price === 'object' ? "0" : (ride?.price || "0")}
+              ₹{ride?.price?.toString() || "0"}
             </h4>
           </div>
           <div className="text-right">

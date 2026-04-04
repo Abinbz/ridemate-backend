@@ -448,10 +448,10 @@ function SearchPage() {
                 >
                   <div className="flex items-center gap-3 mb-4">
                     <div className="w-8 h-8 bg-black text-white rounded-xl flex items-center justify-center text-xs font-black">
-                      {(ride.driver || ride.role || 'R')[0]}
+                      {(ride?.driver?.name || (typeof ride?.driver === 'string' ? ride.driver : (ride.role || 'R')))[0]?.toUpperCase()}
                     </div>
                     <div>
-                      <p className="text-sm font-black text-black leading-none">{ride.driver || (ride.role === 'Driver' ? 'You' : 'Driver')}</p>
+                      <p className="text-sm font-black text-black leading-none">{ride?.driver?.name || (typeof ride?.driver === 'string' ? ride.driver : (ride.role === 'Driver' ? 'You' : 'Driver'))}</p>
                       <p className="text-[9px] font-bold text-gray-300 uppercase tracking-widest mt-0.5">{ride.time || ride.date}</p>
                     </div>
                   </div>

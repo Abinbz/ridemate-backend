@@ -28,10 +28,10 @@ function ResultsPage() {
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 bg-black text-white rounded-2xl flex items-center justify-center text-sm font-black group-hover:scale-95 transition-transform">
-            {ride.avatar || ride.driver?.[0]}
+            {(ride?.driver?.name || (typeof ride?.driver === 'string' ? ride.driver : 'D'))[0]?.toUpperCase()}
           </div>
           <div>
-            <p className="text-sm font-black text-black leading-none mb-1">{ride.driver}</p>
+            <p className="text-sm font-black text-black leading-none mb-1">{ride?.driver?.name || (typeof ride?.driver === 'string' ? ride.driver : "Driver")}</p>
             <div className="flex items-center gap-1">
                <span className="text-[10px] font-bold text-gray-300 uppercase tracking-widest">Rating</span>
                <span className="text-[10px] font-black text-black">{ride.rating}</span>
@@ -79,12 +79,12 @@ function ResultsPage() {
              <button 
                onClick={(e) => {
                  e.stopPropagation();
-                 navigate('/chat', { 
-                   state: { 
-                     receiverId: ride.driverId || ride.createdBy, 
-                     receiverName: ride.driver 
-                   } 
-                 });
+                  navigate('/chat', { 
+                    state: { 
+                      receiverId: ride.driverId || ride.createdBy, 
+                      receiverName: ride?.driver?.name || (typeof ride?.driver === 'string' ? ride.driver : "Driver")
+                    } 
+                  });
 
                }}
                className="w-10 h-10 flex items-center justify-center bg-gray-50 text-black rounded-2xl hover:bg-black hover:text-white transition-all shadow-sm"
@@ -94,17 +94,17 @@ function ResultsPage() {
              </button>
              <div className="w-px h-6 bg-gray-100 mx-2"></div>
              <div>
-                <p className="text-sm font-black text-black">{ride.duration}</p>
+                <p className="text-sm font-black text-black">{ride.duration || "Variable"}</p>
                 <p className="text-[9px] font-bold text-gray-300 uppercase tracking-widest">Duration</p>
              </div>
-             <div className="w-px h-6 bg-gray-100"></div>
+             <div className="w-px h-6 bg-gray-100 mx-2"></div>
               <div>
                  <p className="text-sm font-black text-black">{Array.isArray(ride.passengers) ? ride.passengers.length : (ride.passengers || 0)}</p>
                  <p className="text-[9px] font-bold text-gray-300 uppercase tracking-widest">Seats</p>
               </div>
           </div>
           <div className="text-right">
-             <p className="text-2xl font-black text-black leading-none">₹{ride.price}</p>
+             <p className="text-2xl font-black text-black leading-none">₹{ride.price?.toString() || "0"}</p>
              <p className="text-[9px] font-bold text-gray-300 uppercase tracking-widest mt-1 italic">per seat</p>
           </div>
        </div>
