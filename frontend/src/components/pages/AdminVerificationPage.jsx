@@ -97,26 +97,36 @@ const AdminVerificationPage = () => {
         }
 
         try {
+            setLoading(true);
             const response = await fetch(`${API_BASE_URL}/api/admin/verify-user`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     userId,
                     documents: userDecision.documents,
                     promoteToDriver: userDecision.promoteToDriver
-                })
+                }),
             });
+
             const data = await response.json();
             if (data.success) {
-                setMessage({ text: 'Verification decision submitted successfully', type: 'success' });
-                fetchVerifications();
+                // Part 1: Refresh data and show toast
+                setMessage({ text: 'Decision finalized successfully', type: 'success' });
+                
+                // Part 4: Optimistic UI - Remove user from list and refetch
+                setVerifications(prev => prev.filter(v => v.userId !== userId));
                 setExpandedUser(null);
+                
+                // Full sync to ensure server state matches local
+                await fetchVerifications();
             } else {
-                setMessage({ text: data.message || 'Submission failed', type: 'error' });
+                throw new Error(data.message);
             }
         } catch (error) {
-            console.error('Error submitting verification:', error);
-            setMessage({ text: 'Network error occurred', type: 'error' });
+            console.error('Finalize error:', error);
+            setMessage({ text: error.message || 'Failed to finalize decision', type: 'error' });
+        } finally {
+            setLoading(false);
         }
     };
 

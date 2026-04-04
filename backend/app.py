@@ -1598,29 +1598,39 @@ def verify_user_decision():
         return jsonify({"success": False, "message": "Missing required verification data"}), 400
 
     try:
-        # 1. Flexible Verification Logic: Only check uploaded documents
-        # A doc is present if it has a 'url' property
-        existing_docs = [doc for doc in documents.values() if doc.get("url")]
+        # Part 3: Backend fix - Use granular dot notation for updates
+        update_data = {}
         
-        if existing_docs:
-            statuses = [doc.get("status") for doc in existing_docs]
-            overall_status = "verified" if all(s == "approved" for s in statuses) else "rejected"
+        # Build dynamic $set for each document type provided
+        for doc_type, doc_info in documents.items():
+            if "status" in doc_info:
+                update_data[f"documents.{doc_type}.status"] = doc_info["status"]
+            if "reason" in doc_info:
+                update_data[f"documents.{doc_type}.reason"] = doc_info.get("reason", "")
+            update_data[f"documents.{doc_type}.updatedAt"] = datetime.now()
+
+        # Calculate overall verification status
+        # Note: A user is "verified" only if ALL uploaded documents are approved
+        uploaded_docs = [doc for doc in documents.values() if doc.get("url")]
+        if uploaded_docs:
+            all_approved = all(doc.get("status") == "approved" for doc in uploaded_docs)
+            overall_status = "verified" if all_approved else "rejected"
         else:
             overall_status = "pending"
 
-        # Update user documents and verification state
+        update_data["verificationStatus"] = overall_status
+        update_data["isVerified"] = (overall_status == "verified")
+
+        # 1. Update the database using dot notation to prevent overwriting whole 'documents' object
         users_col.update_one(
             {"_id": ObjectId(user_id)},
-            {
-                "$set": {
-                    "documents": documents,
-                    "verificationStatus": overall_status,
-                    "isVerified": (overall_status == "verified")
-                }
-            }
+            {"$set": update_data}
         )
 
-        # 2. Strict Driver Promotion Check: Required specific docs (License, RC, Insurance)
+        # Part 5: Add console log after update
+        print(f"[ADMIN] Verification updated for: {user_id}")
+
+        # 2. Strict Driver Promotion Check
         license_doc = documents.get("license", {})
         rc_doc = documents.get("rc", {})
         insurance_doc = documents.get("insurance", {})
