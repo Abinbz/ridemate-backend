@@ -92,14 +92,17 @@ function RideDetailsPage() {
 
 
   const handleMessage = () => {
-    if (!ride.driverId && !ride.createdBy) {
+    const driverId = ride.driverId || ride.createdBy;
+    const driverName = typeof ride.driver === 'object' ? ride.driver?.name : ride.driver;
+
+    if (!driverId) {
       showToast('Contact info not available.', 'error');
       return;
     }
     navigate('/chat', { 
       state: { 
-        receiverId: ride.driverId || ride.createdBy, 
-        receiverName: ride.driver 
+        receiverId: driverId, 
+        receiverName: driverName || "Unknown Driver"
       } 
     });
   };
@@ -120,7 +123,9 @@ function RideDetailsPage() {
         </button>
         <div className="flex flex-col">
           <h1 className="text-sm font-black text-black uppercase tracking-widest leading-none">Ride Details</h1>
-          <span className="text-[8px] font-black uppercase text-amber-500 tracking-widest mt-0.5">{ride.status}</span>
+          <span className="text-[8px] font-black uppercase text-amber-500 tracking-widest mt-0.5">
+            {typeof ride?.status === 'string' ? ride.status : "Scheduled"}
+          </span>
         </div>
       </div>
 
@@ -128,27 +133,65 @@ function RideDetailsPage() {
 
         {/* ── Driver Profile ── */}
         <section className="flex flex-col items-center text-center">
-          <div className="w-24 h-24 bg-black text-white rounded-[2rem] flex items-center justify-center text-3xl font-black mb-6 shadow-sm">
-            {ride.avatar || ride.driver?.[0]}
+          <div className="w-24 h-24 bg-black text-white rounded-[2rem] flex items-center justify-center text-3xl font-black mb-6 shadow-sm overflow-hidden">
+            {ride?.driver?.avatar ? (
+              <img src={ride.driver.avatar} alt="driver" className="w-full h-full object-cover" />
+            ) : (
+              <span>
+                {typeof ride?.driver === 'object' 
+                  ? (ride.driver?.name || ride.driver?.username || 'D')[0]?.toUpperCase()
+                  : (ride?.driver || 'D')[0]?.toUpperCase()}
+              </span>
+            )}
           </div>
-          <h2 className="text-2xl font-black text-black leading-none mb-2">{ride.driver}</h2>
+          <h2 className="text-2xl font-black text-black leading-none mb-2">
+            {typeof ride?.driver === 'object' ? (ride.driver?.name || ride.driver?.username) : (ride?.driver || "Strategic Driver")}
+          </h2>
           <div className="flex items-center gap-2 px-4 py-1.5 bg-gray-50 rounded-full">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-black" fill="currentColor" viewBox="0 0 24 24">
               <path d="M12 .587l3.668 7.568 8.332 1.151-6.064 5.828 1.48 8.279-7.416-3.967-7.417 3.967 1.481-8.279-6.064-5.828 8.332-1.151z" />
             </svg>
-            <span className="text-[10px] font-black text-black uppercase tracking-widest">{ride.rating} Rating</span>
+            <span className="text-[10px] font-black text-black uppercase tracking-widest">
+              {(typeof ride?.driver === 'object' ? ride.driver?.rating : ride?.rating) || '5.0'} Rating
+            </span>
           </div>
         </section>
+
+        {/* ── High-Fidelity User Info (Safeguard) ── */}
+        {(ride?.user || (typeof ride?.driver === 'object' && ride.driver)) && (
+          <div className="bg-gray-50/50 p-6 rounded-[2rem] border border-gray-100 flex items-center gap-4">
+            <div className="w-12 h-12 bg-black rounded-xl flex-shrink-0 flex items-center justify-center text-white overflow-hidden">
+              {(ride.user?.avatar || ride.driver?.avatar) ? (
+                <img src={ride.user?.avatar || ride.driver?.avatar} alt="user" className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-xs font-black">
+                  {(ride.user?.name || ride.driver?.name || ride.driver?.username || "U")[0]?.toUpperCase()}
+                </span>
+              )}
+            </div>
+            <div className="flex-1">
+              <h4 className="text-xs font-black text-black uppercase tracking-tight">
+                {ride.user?.name || ride.driver?.name || ride.driver?.username || "Verified Member"}
+              </h4>
+              <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">
+                {ride.user?.email || ride.driver?.email || "Community Intelligence"}
+              </p>
+            </div>
+            <div className="bg-white px-3 py-1.5 rounded-full border border-gray-100 flex items-center gap-1.5">
+              <span className="text-[10px] font-black text-black">⭐ {(ride.user?.rating || ride.driver?.rating) || '5.0'}</span>
+            </div>
+          </div>
+        )}
 
         {/* ── Vehicle Info ── */}
         <section className="border border-gray-100 rounded-[2.5rem] p-8 flex items-center justify-between">
           <div>
             <p className="text-[10px] font-black text-gray-300 uppercase tracking-widest mb-1">Vehicle</p>
-            <p className="text-sm font-black text-black">{ride.vehicleName}</p>
+            <p className="text-sm font-black text-black">{ride?.vehicleName || "Assigned Vehicle"}</p>
           </div>
           <div className="text-right">
             <span className="inline-block px-4 py-1 bg-black text-white text-[9px] font-black uppercase tracking-widest rounded-full">
-              {ride.vehicleType}
+              {ride?.vehicleType || "T1"}
             </span>
             <p className="text-[9px] font-bold text-gray-300 uppercase tracking-widest mt-2">Verified</p>
           </div>
@@ -166,15 +209,15 @@ function RideDetailsPage() {
             <div className="flex-1 space-y-12">
               <div>
                 <div className="flex justify-between items-baseline mb-1">
-                  <p className="text-sm font-black text-black truncate pr-4">{ride.from}</p>
-                  <p className="text-sm font-black text-black shrink-0">{ride.start}</p>
+                  <p className="text-sm font-black text-black truncate pr-4">{ride?.from || "Source"}</p>
+                  <p className="text-sm font-black text-black shrink-0">{ride?.start || "00:00"}</p>
                 </div>
                 <p className="text-[9px] font-bold text-gray-300 uppercase tracking-widest italic">Pickup Point</p>
               </div>
               <div>
                 <div className="flex justify-between items-baseline mb-1">
-                  <p className="text-sm font-black text-black truncate pr-4">{ride.to}</p>
-                  <p className="text-sm font-black text-black shrink-0">{ride.end}</p>
+                  <p className="text-sm font-black text-black truncate pr-4">{ride?.to || "Destination"}</p>
+                  <p className="text-sm font-black text-black shrink-0">{ride?.end || "00:00"}</p>
                 </div>
                 <p className="text-[9px] font-bold text-gray-300 uppercase tracking-widest italic">Destination</p>
               </div>
@@ -183,7 +226,7 @@ function RideDetailsPage() {
 
           <div className="bg-gray-50 p-6 rounded-[2rem] text-center">
             <p className="text-[10px] font-black text-black uppercase tracking-widest">
-              Duration: <span className="text-gray-400">{ride.duration}</span> | Capacity: <span className="text-gray-400">{ride.passengers} Seats</span>
+              Duration: <span className="text-gray-400">{ride?.duration || "Variable"}</span> | Capacity: <span className="text-gray-400">{ride?.passengers || 0} Seats</span>
             </p>
           </div>
         </section>
@@ -192,7 +235,9 @@ function RideDetailsPage() {
         <section className="bg-black text-white p-10 rounded-[2.5rem] flex items-center justify-between shadow-sm">
           <div>
             <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-2 leading-none">Total Fare</p>
-            <h4 className="text-4xl font-black leading-none italic uppercase">₹{ride.price}</h4>
+            <h4 className="text-4xl font-black leading-none italic uppercase">
+              ₹{typeof ride?.price === 'object' ? "0" : (ride?.price || "0")}
+            </h4>
           </div>
           <div className="text-right">
             <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-1">Safe & Secure</p>
