@@ -128,6 +128,15 @@ const AdminVerificationPage = () => {
         }
     };
 
+    const getStatusIndicator = (status) => {
+        switch (status) {
+            case 'approved': return '✔ Approved';
+            case 'rejected': return '❌ Rejected';
+            case 'pending': return '⏳ Pending';
+            default: return '⏳ Pending';
+        }
+    };
+
     if (loading) {
         return (
             <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
@@ -154,125 +163,149 @@ const AdminVerificationPage = () => {
 
             <div className="grid gap-4">
                 {verifications.length > 0 ? (
-                    verifications.map((user) => (
-                        <div key={user.userId} 
-                            className={`bg-white border rounded-[2.5rem] overflow-hidden transition-all duration-500 shadow-sm hover:shadow-xl ${
-                                expandedUser === user.userId ? 'border-black ring-1 ring-black/5' : 'border-gray-100'
-                            }`}
-                        >
-                            {/* Card Header */}
-                            <div 
-                                onClick={() => setExpandedUser(expandedUser === user.userId ? null : user.userId)}
-                                className="p-6 cursor-pointer flex items-center justify-between group"
+                    verifications.map((user) => {
+                        const userDecision = decisions[user.userId] || { documents: {} };
+                        const canBeDriver = 
+                            userDecision.documents.license?.status === 'approved' &&
+                            userDecision.documents.rc?.status === 'approved' &&
+                            userDecision.documents.insurance?.status === 'approved';
+
+                        return (
+                            <div key={user.userId} 
+                                className={`bg-white border rounded-[2.5rem] overflow-hidden transition-all duration-500 shadow-sm hover:shadow-xl ${
+                                    expandedUser === user.userId ? 'border-black ring-1 ring-black/5' : 'border-gray-100'
+                                }`}
                             >
-                                <div className="flex items-center gap-5">
-                                    <div className="w-14 h-14 bg-black text-white rounded-[1.25rem] flex items-center justify-center text-xl font-black shadow-lg group-hover:scale-105 transition-transform">
-                                        {user.username?.charAt(0).toUpperCase()}
+                                {/* Card Header */}
+                                <div 
+                                    onClick={() => setExpandedUser(expandedUser === user.userId ? null : user.userId)}
+                                    className="p-6 cursor-pointer flex items-center justify-between group"
+                                >
+                                    <div className="flex items-center gap-5">
+                                        <div className="w-14 h-14 bg-black text-white rounded-[1.25rem] flex items-center justify-center text-xl font-black shadow-lg group-hover:scale-105 transition-transform">
+                                            {user.username?.charAt(0).toUpperCase()}
+                                        </div>
+                                        <div className="space-y-1">
+                                            <h3 className="text-sm font-black text-black uppercase tracking-tight">{user.username}</h3>
+                                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">ID: {user.collegeId}</p>
+                                        </div>
                                     </div>
-                                    <div className="space-y-1">
-                                        <h3 className="text-sm font-black text-black uppercase tracking-tight">{user.username}</h3>
-                                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">ID: {user.collegeId}</p>
+
+                                    <div className="flex items-center gap-4">
+                                        <span className={`px-4 py-1.5 rounded-full border text-[9px] font-black uppercase tracking-widest ${getStatusBadgeClass(user.verificationStatus)}`}>
+                                            {user.verificationStatus || 'Pending'}
+                                        </span>
+                                        <div className={`w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center transition-transform duration-500 ${expandedUser === user.userId ? 'rotate-180 bg-black text-white' : ''}`}>
+                                            ▼
+                                        </div>
                                     </div>
                                 </div>
 
-                                <div className="flex items-center gap-4">
-                                    <span className={`px-4 py-1.5 rounded-full border text-[9px] font-black uppercase tracking-widest ${getStatusBadgeClass(user.verificationStatus)}`}>
-                                        {user.verificationStatus || 'Pending'}
-                                    </span>
-                                    <div className={`w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center transition-transform duration-500 ${expandedUser === user.userId ? 'rotate-180 bg-black text-white' : ''}`}>
-                                        ▼
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Expandable Content */}
-                            {expandedUser === user.userId && (
-                                <div className="px-6 pb-8 space-y-8 animate-in slide-in-from-top-4 duration-500">
-                                    {/* Document Section */}
-                                    <div className="grid gap-8 border-t border-gray-50 pt-8">
-                                        {[
-                                            { id: 'license', label: 'Driving License', url: user.documents?.license?.url },
-                                            { id: 'rc', label: 'Registration (RC)', url: user.documents?.rc?.url },
-                                            { id: 'insurance', label: 'Insurance Policy', url: user.documents?.insurance?.url }
-                                        ].map((doc) => (
-                                            <div key={doc.id} className="grid md:grid-cols-2 gap-6 items-start">
-                                                {/* Image Preview */}
-                                                <div className="relative aspect-video bg-gray-50 rounded-3xl overflow-hidden border border-gray-100 group/img">
-                                                    {doc.url ? (
-                                                        <>
-                                                            <img src={doc.url} alt={doc.label} className="w-full h-full object-cover" />
-                                                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center">
-                                                                <button 
-                                                                    onClick={() => window.open(doc.url, '_blank')}
-                                                                    className="bg-white text-black px-6 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest transform translate-y-4 group-hover/img:translate-y-0 transition-transform"
-                                                                >
-                                                                    View Full Rez
-                                                                </button>
+                                {/* Expandable Content */}
+                                {expandedUser === user.userId && (
+                                    <div className="px-6 pb-8 space-y-8 animate-in slide-in-from-top-4 duration-500">
+                                        {/* Document Section */}
+                                        <div className="grid gap-8 border-t border-gray-50 pt-8">
+                                            {[
+                                                { id: 'license', label: 'Driving License', url: user.documents?.license?.url },
+                                                { id: 'rc', label: 'Registration (RC)', url: user.documents?.rc?.url },
+                                                { id: 'insurance', label: 'Insurance Policy', url: user.documents?.insurance?.url }
+                                            ].map((doc) => (
+                                                <div key={doc.id} className="grid md:grid-cols-2 gap-6 items-start">
+                                                    {/* Image Preview */}
+                                                    <div className="relative aspect-video bg-gray-50 rounded-3xl overflow-hidden border border-gray-100 group/img">
+                                                        {doc.url ? (
+                                                            <>
+                                                                <img src={doc.url} alt={doc.label} className="w-full h-full object-cover" />
+                                                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center">
+                                                                    <button 
+                                                                        onClick={() => window.open(doc.url, '_blank')}
+                                                                        className="bg-white text-black px-6 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest transform translate-y-4 group-hover/img:translate-y-0 transition-transform"
+                                                                    >
+                                                                        View Full Rez
+                                                                    </button>
+                                                                </div>
+                                                            </>
+                                                        ) : (
+                                                            <div className="w-full h-full flex items-center justify-center text-[10px] font-black text-gray-300 uppercase tracking-widest">
+                                                                No Image Uploaded
                                                             </div>
-                                                        </>
-                                                    ) : (
-                                                        <div className="w-full h-full flex items-center justify-center text-[10px] font-black text-gray-300 uppercase tracking-widest">
-                                                            No Image Uploaded
-                                                        </div>
-                                                    )}
-                                                </div>
-
-                                                {/* Controls */}
-                                                <div className="space-y-4">
-                                                    <div className="flex flex-col gap-1">
-                                                        <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{doc.label} Status</span>
-                                                        <select 
-                                                            value={decisions[user.userId]?.documents[doc.id]?.status || 'approved'}
-                                                            onChange={(e) => updateStatus(user.userId, doc.id, e.target.value)}
-                                                            className="w-full bg-gray-50 border-none rounded-2xl px-5 py-4 text-[11px] font-bold focus:ring-2 ring-black transition-all appearance-none cursor-pointer"
-                                                        >
-                                                            <option value="approved">✅ Approve Document</option>
-                                                            <option value="rejected">❌ Reject Document</option>
-                                                        </select>
+                                                        )}
                                                     </div>
 
-                                                    {decisions[user.userId]?.documents[doc.id]?.status === 'rejected' && (
-                                                        <div className="animate-in fade-in slide-in-from-top-2 duration-300">
-                                                            <textarea
-                                                                placeholder="SPECIFY REJECTION REASON..."
-                                                                value={decisions[user.userId]?.documents[doc.id]?.reason || ''}
-                                                                onChange={(e) => updateReason(user.userId, doc.id, e.target.value)}
-                                                                className="w-full bg-red-50/50 border border-red-100 rounded-2xl px-5 py-4 text-[11px] font-bold focus:ring-1 ring-red-500 min-h-[80px] uppercase tracking-tight"
-                                                            />
+                                                    {/* Controls */}
+                                                    <div className="space-y-4">
+                                                        <div className="flex flex-col gap-1">
+                                                            <div className="flex justify-between items-center px-1">
+                                                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{doc.label} Status</span>
+                                                                <span className={`text-[9px] font-black uppercase tracking-widest ${
+                                                                    userDecision.documents[doc.id]?.status === 'approved' ? 'text-emerald-500' : 
+                                                                    userDecision.documents[doc.id]?.status === 'rejected' ? 'text-red-500' : 'text-amber-500'
+                                                                }`}>
+                                                                    {getStatusIndicator(userDecision.documents[doc.id]?.status)}
+                                                                </span>
+                                                            </div>
+                                                            <select 
+                                                                value={userDecision.documents[doc.id]?.status || 'approved'}
+                                                                onChange={(e) => updateStatus(user.userId, doc.id, e.target.value)}
+                                                                className="w-full bg-gray-50 border-none rounded-2xl px-5 py-4 text-[11px] font-bold focus:ring-2 ring-black transition-all appearance-none cursor-pointer"
+                                                            >
+                                                                <option value="approved">✅ Approve Document</option>
+                                                                <option value="rejected">❌ Reject Document</option>
+                                                            </select>
                                                         </div>
-                                                    )}
+
+                                                        {userDecision.documents[doc.id]?.status === 'rejected' && (
+                                                            <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+                                                                <textarea
+                                                                    placeholder="SPECIFY REJECTION REASON..."
+                                                                    value={userDecision.documents[doc.id]?.reason || ''}
+                                                                    onChange={(e) => updateReason(user.userId, doc.id, e.target.value)}
+                                                                    className="w-full bg-red-50/50 border border-red-100 rounded-2xl px-5 py-4 text-[11px] font-bold focus:ring-1 ring-red-500 min-h-[80px] uppercase tracking-tight"
+                                                                />
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        ))}
-                                    </div>
+                                            ))}
+                                        </div>
 
-                                    {/* Action Bar */}
-                                    <div className="border-t border-gray-50 pt-8 flex flex-col md:flex-row items-center justify-between gap-6">
-                                        <label className="flex items-center gap-4 cursor-pointer group">
-                                            <div className="relative">
-                                                <input 
-                                                    type="checkbox"
-                                                    checked={decisions[user.userId]?.promoteToDriver}
-                                                    onChange={() => togglePromote(user.userId)}
-                                                    className="sr-only"
-                                                />
-                                                <div className={`w-12 h-6 rounded-full transition-colors duration-300 ${decisions[user.userId]?.promoteToDriver ? 'bg-black' : 'bg-gray-200'}`}></div>
-                                                <div className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform duration-300 ${decisions[user.userId]?.promoteToDriver ? 'translate-x-6' : ''}`}></div>
+                                        {/* Action Bar */}
+                                        <div className="border-t border-gray-50 pt-8 flex flex-col md:flex-row items-center justify-between gap-6">
+                                            <div className="flex flex-col gap-2">
+                                                <label className={`flex items-center gap-4 cursor-pointer group ${!canBeDriver ? 'opacity-40 cursor-not-allowed' : ''}`}>
+                                                    <div className="relative">
+                                                        <input 
+                                                            type="checkbox"
+                                                            checked={userDecision.promoteToDriver}
+                                                            disabled={!canBeDriver}
+                                                            onChange={() => togglePromote(user.userId)}
+                                                            className="sr-only"
+                                                        />
+                                                        <div className={`w-12 h-6 rounded-full transition-colors duration-300 ${userDecision.promoteToDriver ? 'bg-black' : 'bg-gray-200'}`}></div>
+                                                        <div className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform duration-300 ${userDecision.promoteToDriver ? 'translate-x-6' : ''}`}></div>
+                                                    </div>
+                                                    <span className="text-[11px] font-black text-black uppercase tracking-widest transition-opacity">Promote as Driver</span>
+                                                </label>
+                                                {!canBeDriver && (
+                                                    <p className="text-[9px] font-black text-red-500 uppercase tracking-widest pl-1 animate-pulse">
+                                                        ⚠ All 3 documents must be approved for promotion
+                                                    </p>
+                                                )}
                                             </div>
-                                            <span className="text-[11px] font-black text-black uppercase tracking-widest group-hover:opacity-70 transition-opacity">Promote as Driver</span>
-                                        </label>
 
-                                        <button 
-                                            onClick={() => handleSubmit(user.userId)}
-                                            className="w-full md:w-auto px-12 py-5 bg-black text-white text-[11px] font-black uppercase tracking-[0.2em] rounded-[1.5rem] hover:bg-gray-900 active:scale-[0.98] transition-all shadow-xl shadow-gray-200"
-                                        >
-                                            Finalize Decision
-                                        </button>
+                                            <button 
+                                                onClick={() => handleSubmit(user.userId)}
+                                                className="w-full md:w-auto px-12 py-5 bg-black text-white text-[11px] font-black uppercase tracking-[0.2em] rounded-[1.5rem] hover:bg-gray-900 active:scale-[0.98] transition-all shadow-xl shadow-gray-200"
+                                            >
+                                                Finalize Decision
+                                            </button>
+                                        </div>
                                     </div>
-                                </div>
-                            )}
-                        </div>
-                    ))
+                                )}
+                            </div>
+                        );
+                    })
                 ) : (
                     <div className="py-24 text-center border-2 border-dashed border-gray-100 rounded-[3rem] bg-gray-50/30">
                         <div className="w-20 h-20 bg-white rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-sm text-3xl">🛡️</div>

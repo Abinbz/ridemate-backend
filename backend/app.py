@@ -468,10 +468,20 @@ def get_vehicles(user_id):
 @app.route("/api/post-ride", methods=["POST", "OPTIONS"])
 def post_ride():
     data = safe_json()
+    user_id = data.get('userId') or data.get('createdBy')
+    
     if not data or not data.get('startingFrom') or not data.get('goingTo'):
         return jsonify({"success": False, "message": "Missing route details"}), 400
         
     try:
+        # Strict Eligibility Check: Must be a verified driver
+        user = users_col.find_one({"_id": ObjectId(user_id)})
+        if not user or not user.get("isDriver"):
+             return jsonify({
+                 "success": False, 
+                 "message": "Only verified drivers can post rides. Please complete verification."
+             }), 403
+
         # User requested standardization and logging
         print(f"DEBUG: Post Ride Attempt - Body: {data}")
 
@@ -1581,9 +1591,15 @@ def verify_user_decision():
         return jsonify({"success": False, "message": "Missing required verification data"}), 400
 
     try:
-        # Determine overall status based on document statuses
-        statuses = [doc.get("status") for doc in documents.values()]
-        overall_status = "verified" if all(s == "approved" for s in statuses) else "rejected"
+        # 1. Flexible Verification Logic: Only check uploaded documents
+        # A doc is present if it has a 'url' property
+        existing_docs = [doc for doc in documents.values() if doc.get("url")]
+        
+        if existing_docs:
+            statuses = [doc.get("status") for doc in existing_docs]
+            overall_status = "verified" if all(s == "approved" for s in statuses) else "rejected"
+        else:
+            overall_status = "pending"
 
         # Update user documents and verification state
         users_col.update_one(
@@ -1597,8 +1613,25 @@ def verify_user_decision():
             }
         )
 
-        # Promote to driver if requested and verified
-        if promote and overall_status == "verified":
+        # 2. Strict Driver Promotion Check: Required specific docs (License, RC, Insurance)
+        license_doc = documents.get("license", {})
+        rc_doc = documents.get("rc", {})
+        insurance_doc = documents.get("insurance", {})
+
+        can_be_driver = (
+            license_doc.get("status") == "approved" and
+            rc_doc.get("status") == "approved" and
+            insurance_doc.get("status") == "approved"
+        )
+
+        # Promote to driver if requested and eligible
+        if promote:
+            if not can_be_driver:
+                return jsonify({
+                    "success": False,
+                    "message": "Strict Eligibility Failed: All 3 documents (License, RC, Insurance) must be approved to promote as a driver."
+                }), 400
+
             users_col.update_one(
                 {"_id": ObjectId(user_id)},
                 {

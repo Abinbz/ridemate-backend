@@ -72,6 +72,33 @@ function PostPage() {
     return DEFAULT_COORDS;
   };
 
+  // 🛡️ Security: Enforce driver eligibility on mount
+  useEffect(() => {
+    const checkDriverStatus = async () => {
+        const userId = localStorage.getItem('userId');
+        if (!userId) {
+            navigate('/');
+            return;
+        }
+
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/user/${userId}`);
+            const data = await response.json();
+            
+            if (data.success) {
+                if (!data.user.isDriver) {
+                    alert("🚫 ACCESS DENIED\n\nYou must be a verified driver to offer rides. Please complete your profile verification and ensure all documents are approved.");
+                    navigate('/user/home');
+                }
+            }
+        } catch (error) {
+            console.error('Eligibility check failed:', error);
+        }
+    };
+
+    checkDriverStatus();
+  }, [navigate]);
+
   // Trigger route calculation automatically
   useEffect(() => {
     if (startCoords && endCoords) {
