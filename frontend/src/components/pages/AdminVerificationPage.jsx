@@ -4,7 +4,9 @@ import { API_BASE_URL } from '../../config/api';
 const AdminVerificationPage = () => {
     const [verifications, setVerifications] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [selectedDoc, setSelectedDoc] = useState(null);
+    const [expandedUser, setExpandedUser] = useState(null);
+    const [decisions, setDecisions] = useState({});
+    const [message, setMessage] = useState({ text: '', type: '' });
 
     useEffect(() => {
         fetchVerifications();
@@ -12,137 +14,273 @@ const AdminVerificationPage = () => {
 
     const fetchVerifications = async () => {
         try {
-            const url = `${API_BASE_URL}/api/admin/verifications`;
-            console.log("API CALL:", url, 'GET');
-            const response = await fetch(url);
+            setLoading(true);
+            const response = await fetch(`${API_BASE_URL}/api/admin/verifications`);
             const data = await response.json();
             if (data.success) {
                 setVerifications(data.verifications || []);
+                // Initialize decisions state
+                const initialDecisions = {};
+                data.verifications.forEach(v => {
+                    initialDecisions[v.userId] = {
+                        documents: {
+                            license: { status: v.documents?.license?.status || 'approved', reason: v.documents?.license?.reason || '' },
+                            rc: { status: v.documents?.rc?.status || 'approved', reason: v.documents?.rc?.reason || '' },
+                            insurance: { status: v.documents?.insurance?.status || 'approved', reason: v.documents?.insurance?.reason || '' }
+                        },
+                        promoteToDriver: false
+                    };
+                });
+                setDecisions(initialDecisions);
             }
         } catch (error) {
             console.error('Error fetching verifications:', error);
+            setMessage({ text: 'Failed to load verifications', type: 'error' });
         } finally {
             setLoading(false);
         }
     };
 
-    const handleAction = async (userId, action) => {
+    const updateStatus = (userId, docType, status) => {
+        setDecisions(prev => ({
+            ...prev,
+            [userId]: {
+                ...prev[userId],
+                documents: {
+                    ...prev[userId].documents,
+                    [docType]: { ...prev[userId].documents[docType], status }
+                }
+            }
+        }));
+    };
+
+    const updateReason = (userId, docType, reason) => {
+        setDecisions(prev => ({
+            ...prev,
+            [userId]: {
+                ...prev[userId],
+                documents: {
+                    ...prev[userId].documents,
+                    [docType]: { ...prev[userId].documents[docType], reason }
+                }
+            }
+        }));
+    };
+
+    const togglePromote = (userId) => {
+        setDecisions(prev => ({
+            ...prev,
+            [userId]: {
+                ...prev[userId],
+                promoteToDriver: !prev[userId].promoteToDriver
+            }
+        }));
+    };
+
+    const handleSubmit = async (userId) => {
+        const userDecision = decisions[userId];
+        
+        // Validation: Reject must include reason
+        const rejectedDocs = Object.entries(userDecision.documents).filter(([_, doc]) => doc.status === 'rejected');
+        const missingReasons = rejectedDocs.some(([_, doc]) => !doc.reason.trim());
+        
+        if (missingReasons) {
+            setMessage({ text: 'Please provide a reason for all rejected documents', type: 'error' });
+            return;
+        }
+
+        // Validation: Promote only works if ALL are approved
+        const allApproved = Object.values(userDecision.documents).every(doc => doc.status === 'approved');
+        if (userDecision.promoteToDriver && !allApproved) {
+            setMessage({ text: 'Users can only be promoted if all documents are approved', type: 'error' });
+            return;
+        }
+
         try {
-            const endpoint = action === 'approve' ? 'verify' : 'reject';
-            const url = `${API_BASE_URL}/api/admin/${endpoint}/${userId}`;
-            console.log("API CALL:", url, 'POST');
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({})
+            const response = await fetch(`${API_BASE_URL}/api/admin/verify-user`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    userId,
+                    documents: userDecision.documents,
+                    promoteToDriver: userDecision.promoteToDriver
+                })
             });
             const data = await response.json();
             if (data.success) {
-                // Refresh list
+                setMessage({ text: 'Verification decision submitted successfully', type: 'success' });
                 fetchVerifications();
+                setExpandedUser(null);
+            } else {
+                setMessage({ text: data.message || 'Submission failed', type: 'error' });
             }
         } catch (error) {
-            console.error(`Error ${action}ing verification:`, error);
-            // Silent error for admin action feedback
+            console.error('Error submitting verification:', error);
+            setMessage({ text: 'Network error occurred', type: 'error' });
+        }
+    };
+
+    const getStatusBadgeClass = (status) => {
+        switch (status) {
+            case 'verified': return 'bg-emerald-50 text-emerald-600 border-emerald-100';
+            case 'rejected': return 'bg-red-50 text-red-600 border-red-100';
+            default: return 'bg-amber-50 text-amber-600 border-amber-100';
         }
     };
 
     if (loading) {
         return (
-            <div className="flex items-center justify-center min-h-[60vh]">
-                <div className="w-8 h-8 border-4 border-black border-t-transparent rounded-full animate-spin"></div>
+            <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
+                <div className="w-12 h-12 border-4 border-black border-t-transparent rounded-full animate-spin"></div>
+                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest animate-pulse">Syncing Validation Data...</p>
             </div>
         );
     }
 
     return (
-        <div className="p-6 space-y-6 animate-in fade-in duration-700">
-            <div className="flex flex-col gap-1">
-                <h2 className="text-2xl font-black tracking-tighter text-black uppercase">Validation Chamber</h2>
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">KYC Approval System</p>
-            </div>
+        <div className="p-6 max-w-4xl mx-auto space-y-8 pb-32">
+            <header className="space-y-1">
+                <h1 className="text-3xl font-black tracking-tighter text-black uppercase leading-none">Validation Central</h1>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.3em]">Advanced Driver Compliance System</p>
+            </header>
 
-            <div className="space-y-4">
+            {message.text && (
+                <div className={`p-4 rounded-2xl border text-[11px] font-bold uppercase tracking-widest animate-in slide-in-from-top-4 duration-300 ${
+                    message.type === 'success' ? 'bg-emerald-50 border-emerald-100 text-emerald-600' : 'bg-red-50 border-red-100 text-red-600'
+                }`}>
+                    {message.text}
+                </div>
+            )}
+
+            <div className="grid gap-4">
                 {verifications.length > 0 ? (
-                    verifications.map((v) => (
-                        <div key={v.userId} className="bg-white border border-gray-100 p-6 rounded-[2.5rem] shadow-sm hover:shadow-xl transition-all group relative overflow-hidden">
-                            <div className="flex justify-between items-start mb-6">
-                                <div className="flex items-center gap-4">
-                                    <div className="w-12 h-12 bg-black text-white rounded-2xl flex items-center justify-center text-lg font-black shadow-lg shadow-gray-200 group-hover:scale-110 transition-transform duration-500">
-                                        {v?.userName?.charAt(0)?.toUpperCase() || 'U'}
+                    verifications.map((user) => (
+                        <div key={user.userId} 
+                            className={`bg-white border rounded-[2.5rem] overflow-hidden transition-all duration-500 shadow-sm hover:shadow-xl ${
+                                expandedUser === user.userId ? 'border-black ring-1 ring-black/5' : 'border-gray-100'
+                            }`}
+                        >
+                            {/* Card Header */}
+                            <div 
+                                onClick={() => setExpandedUser(expandedUser === user.userId ? null : user.userId)}
+                                className="p-6 cursor-pointer flex items-center justify-between group"
+                            >
+                                <div className="flex items-center gap-5">
+                                    <div className="w-14 h-14 bg-black text-white rounded-[1.25rem] flex items-center justify-center text-xl font-black shadow-lg group-hover:scale-105 transition-transform">
+                                        {user.username?.charAt(0).toUpperCase()}
                                     </div>
-                                    <div>
-                                        <h3 className="text-sm font-black text-black leading-none uppercase tracking-tight">{v.userName || 'Anonymous Entity'}</h3>
-                                        <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mt-1">{v.userEmail}</p>
+                                    <div className="space-y-1">
+                                        <h3 className="text-sm font-black text-black uppercase tracking-tight">{user.username}</h3>
+                                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">ID: {user.collegeId}</p>
                                     </div>
                                 </div>
-                                <span className={`text-[8px] font-black uppercase tracking-widest px-3 py-1.5 rounded-full shadow-sm shadow-gray-200 border border-gray-50 bg-white
-                                    ${v.status === 'pending' ? 'text-amber-500' : v.status === 'approved' ? 'text-emerald-500' : 'text-red-500'}`}>
-                                    {v.status || 'Checking'}
-                                </span>
+
+                                <div className="flex items-center gap-4">
+                                    <span className={`px-4 py-1.5 rounded-full border text-[9px] font-black uppercase tracking-widest ${getStatusBadgeClass(user.verificationStatus)}`}>
+                                        {user.verificationStatus || 'Pending'}
+                                    </span>
+                                    <div className={`w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center transition-transform duration-500 ${expandedUser === user.userId ? 'rotate-180 bg-black text-white' : ''}`}>
+                                        ▼
+                                    </div>
+                                </div>
                             </div>
 
-                            <div className="grid grid-cols-3 gap-2 mb-6">
-                                {[
-                                    { key: 'licenseUrl', label: 'License' },
-                                    { key: 'rcUrl', label: 'Vehicle RC' },
-                                    { key: 'insuranceUrl', label: 'Insurance' }
-                                ].map((doc) => (
-                                    <button 
-                                        key={doc.key}
-                                        onClick={() => window.open(v[doc.key], '_blank')}
-                                        className="py-3 bg-gray-50 border border-transparent rounded-2xl flex flex-col items-center justify-center gap-1 hover:bg-black hover:text-white transition-all group/doc"
-                                    >
-                                        <p className="text-[7px] font-black uppercase tracking-widest leading-none text-gray-400 group-hover/doc:text-white/60">{doc.label}</p>
-                                        <p className="text-[9px] font-bold uppercase tracking-tight">View</p>
-                                    </button>
-                                ))}
-                            </div>
+                            {/* Expandable Content */}
+                            {expandedUser === user.userId && (
+                                <div className="px-6 pb-8 space-y-8 animate-in slide-in-from-top-4 duration-500">
+                                    {/* Document Section */}
+                                    <div className="grid gap-8 border-t border-gray-50 pt-8">
+                                        {[
+                                            { id: 'license', label: 'Driving License', url: user.documents?.license?.url },
+                                            { id: 'rc', label: 'Registration (RC)', url: user.documents?.rc?.url },
+                                            { id: 'insurance', label: 'Insurance Policy', url: user.documents?.insurance?.url }
+                                        ].map((doc) => (
+                                            <div key={doc.id} className="grid md:grid-cols-2 gap-6 items-start">
+                                                {/* Image Preview */}
+                                                <div className="relative aspect-video bg-gray-50 rounded-3xl overflow-hidden border border-gray-100 group/img">
+                                                    {doc.url ? (
+                                                        <>
+                                                            <img src={doc.url} alt={doc.label} className="w-full h-full object-cover" />
+                                                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center">
+                                                                <button 
+                                                                    onClick={() => window.open(doc.url, '_blank')}
+                                                                    className="bg-white text-black px-6 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest transform translate-y-4 group-hover/img:translate-y-0 transition-transform"
+                                                                >
+                                                                    View Full Rez
+                                                                </button>
+                                                            </div>
+                                                        </>
+                                                    ) : (
+                                                        <div className="w-full h-full flex items-center justify-center text-[10px] font-black text-gray-300 uppercase tracking-widest">
+                                                            No Image Uploaded
+                                                        </div>
+                                                    )}
+                                                </div>
 
-                            {v.status === 'pending' && (
-                                <div className="flex gap-2 animate-in slide-in-from-bottom-2 duration-500">
-                                    <button 
-                                        onClick={() => handleAction(v.userId, 'reject')}
-                                        className="flex-1 py-3.5 mb-2 bg-gray-50 text-[9px] font-black text-gray-400 uppercase tracking-[0.2em] rounded-2xl hover:text-red-500 transition-all border border-transparent hover:border-red-100"
-                                    >
-                                        Reject Entry
-                                    </button>
-                                    <button 
-                                        onClick={() => handleAction(v.userId, 'approve')}
-                                        className="flex-1 py-3.5 mb-2 bg-black text-[9px] font-black text-white uppercase tracking-[0.2em] rounded-2xl hover:bg-gray-900 active:scale-95 transition-all shadow-lg shadow-gray-200"
-                                    >
-                                        Validate Access
-                                    </button>
+                                                {/* Controls */}
+                                                <div className="space-y-4">
+                                                    <div className="flex flex-col gap-1">
+                                                        <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{doc.label} Status</span>
+                                                        <select 
+                                                            value={decisions[user.userId]?.documents[doc.id]?.status || 'approved'}
+                                                            onChange={(e) => updateStatus(user.userId, doc.id, e.target.value)}
+                                                            className="w-full bg-gray-50 border-none rounded-2xl px-5 py-4 text-[11px] font-bold focus:ring-2 ring-black transition-all appearance-none cursor-pointer"
+                                                        >
+                                                            <option value="approved">✅ Approve Document</option>
+                                                            <option value="rejected">❌ Reject Document</option>
+                                                        </select>
+                                                    </div>
+
+                                                    {decisions[user.userId]?.documents[doc.id]?.status === 'rejected' && (
+                                                        <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+                                                            <textarea
+                                                                placeholder="SPECIFY REJECTION REASON..."
+                                                                value={decisions[user.userId]?.documents[doc.id]?.reason || ''}
+                                                                onChange={(e) => updateReason(user.userId, doc.id, e.target.value)}
+                                                                className="w-full bg-red-50/50 border border-red-100 rounded-2xl px-5 py-4 text-[11px] font-bold focus:ring-1 ring-red-500 min-h-[80px] uppercase tracking-tight"
+                                                            />
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    {/* Action Bar */}
+                                    <div className="border-t border-gray-50 pt-8 flex flex-col md:flex-row items-center justify-between gap-6">
+                                        <label className="flex items-center gap-4 cursor-pointer group">
+                                            <div className="relative">
+                                                <input 
+                                                    type="checkbox"
+                                                    checked={decisions[user.userId]?.promoteToDriver}
+                                                    onChange={() => togglePromote(user.userId)}
+                                                    className="sr-only"
+                                                />
+                                                <div className={`w-12 h-6 rounded-full transition-colors duration-300 ${decisions[user.userId]?.promoteToDriver ? 'bg-black' : 'bg-gray-200'}`}></div>
+                                                <div className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform duration-300 ${decisions[user.userId]?.promoteToDriver ? 'translate-x-6' : ''}`}></div>
+                                            </div>
+                                            <span className="text-[11px] font-black text-black uppercase tracking-widest group-hover:opacity-70 transition-opacity">Promote as Driver</span>
+                                        </label>
+
+                                        <button 
+                                            onClick={() => handleSubmit(user.userId)}
+                                            className="w-full md:w-auto px-12 py-5 bg-black text-white text-[11px] font-black uppercase tracking-[0.2em] rounded-[1.5rem] hover:bg-gray-900 active:scale-[0.98] transition-all shadow-xl shadow-gray-200"
+                                        >
+                                            Finalize Decision
+                                        </button>
+                                    </div>
                                 </div>
                             )}
                         </div>
                     ))
                 ) : (
-                    <div className="py-20 text-center border-2 border-dashed border-gray-100 rounded-[3rem]">
-                        <p className="text-[10px] font-black text-gray-300 uppercase tracking-widest leading-none animate-pulse">Zero Authentications Pending</p>
+                    <div className="py-24 text-center border-2 border-dashed border-gray-100 rounded-[3rem] bg-gray-50/30">
+                        <div className="w-20 h-20 bg-white rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-sm text-3xl">🛡️</div>
+                        <h3 className="text-sm font-black text-black uppercase tracking-widest mb-1">Queue Empty</h3>
+                        <p className="text-[10px] font-bold text-gray-300 uppercase tracking-widest">No validation requests currently pending.</p>
                     </div>
                 )}
             </div>
-
-            {/* Lightbox Preview */}
-            {selectedDoc && (
-                <div 
-                    className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-xl flex flex-col items-center justify-center p-6 animate-in fade-in duration-300"
-                    onClick={() => setSelectedDoc(null)}
-                >
-                    <div className="relative max-w-full max-h-[80vh] overflow-hidden rounded-[3rem] animate-in zoom-in-95 duration-500 border border-white/10 shadow-2xl">
-                        <img 
-                            src={selectedDoc} 
-                            alt="Document Preview" 
-                            className="w-full h-full object-contain"
-                        />
-                        <button className="absolute top-6 right-6 w-12 h-12 bg-white text-black rounded-full flex items-center justify-center font-black transition-transform hover:scale-110 active:scale-90">
-                            ✕
-                        </button>
-                    </div>
-                    <p className="mt-8 text-[10px] font-black text-white uppercase tracking-[0.3em]">Authorized Document Preview</p>
-                </div>
-            )}
         </div>
     );
 };

@@ -1545,21 +1545,93 @@ def admin_get_users():
         print(f"Admin Get Users Error: {e}")
         return jsonify({"success": False, "message": "Database error"}), 500
 
-@app.route("/api/admin/verify-user", methods=["POST", "OPTIONS"])
-def admin_verify_user():
-    data = safe_json()
-    user_id = data.get('userId')
-    if not user_id:
-        return jsonify({"success": False, "message": "Missing userId"}), 400
+@app.route('/api/admin/verifications', methods=['GET', 'OPTIONS'])
+def get_verifications():
     try:
-        result = users_col.update_one(
+        # Find users who have at least a license URL uploaded
+        users_list = list(users_col.find({
+            "documents.license.url": {"$exists": True}
+        }))
+
+        result = []
+        for user in users_list:
+            user["_id"] = str(user["_id"])
+            result.append({
+                "userId": user["_id"],
+                "username": user.get("username"),
+                "collegeId": user.get("collegeId"),
+                "documents": user.get("documents", {}),
+                "verificationStatus": user.get("verificationStatus", "pending")
+            })
+
+        return jsonify({"success": True, "verifications": result}), 200
+    except Exception as e:
+        print(f"Admin Get Verifications Error: {e}")
+        return jsonify({"success": False, "message": "Database error"}), 500
+
+@app.route('/api/admin/verify-user', methods=['POST', 'OPTIONS'])
+def verify_user_decision():
+    data = safe_json()
+
+    user_id = data.get("userId")
+    documents = data.get("documents")
+    promote = data.get("promoteToDriver")
+
+    if not user_id or not documents:
+        return jsonify({"success": False, "message": "Missing required verification data"}), 400
+
+    try:
+        # Determine overall status based on document statuses
+        statuses = [doc.get("status") for doc in documents.values()]
+        overall_status = "verified" if all(s == "approved" for s in statuses) else "rejected"
+
+        # Update user documents and verification state
+        users_col.update_one(
             {"_id": ObjectId(user_id)},
-            {"$set": {"isVerified": True}}
+            {
+                "$set": {
+                    "documents": documents,
+                    "verificationStatus": overall_status,
+                    "isVerified": (overall_status == "verified")
+                }
+            }
         )
-        if result.matched_count == 0:
-            return jsonify({"success": False, "message": "User not found"}), 404
-        print(f"Admin verified user: {user_id}")
-        return jsonify({"success": True, "message": "User verified successfully"}), 200
+
+        # Promote to driver if requested and verified
+        if promote and overall_status == "verified":
+            users_col.update_one(
+                {"_id": ObjectId(user_id)},
+                {
+                    "$set": {
+                        "role": "user_driver",
+                        "isDriver": True
+                    }
+                }
+            )
+
+        # Construct notification message
+        status_text = "approved" if overall_status == "verified" else "rejected"
+        notification_msg = f"Your verification documents have been {status_text}."
+        
+        if overall_status == "rejected":
+            reasons = [f"{k.upper()}: {v.get('reason')}" for k, v in documents.items() if v.get('status') == 'rejected']
+            if reasons:
+                notification_msg += " Reasons: " + ", ".join(reasons)
+
+        # Create system notification
+        notifications_col.insert_one({
+            "userId": user_id,
+            "type": "document",
+            "title": f"Verification {overall_status.capitalize()}",
+            "message": notification_msg,
+            "isRead": False,
+            "createdAt": datetime.now()
+        })
+
+        # Send push notification
+        send_push_notification(user_id, f"Verification {overall_status.capitalize()}", notification_msg, {"type": "document"})
+
+        return jsonify({"success": True, "message": f"Verification decision set to {overall_status}"}), 200
     except Exception as e:
         print(f"Admin Verify User Error: {e}")
         return jsonify({"success": False, "message": "Database error"}), 500
