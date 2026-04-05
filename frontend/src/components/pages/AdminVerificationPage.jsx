@@ -15,23 +15,46 @@ const AdminVerificationPage = () => {
     const fetchVerifications = async () => {
         try {
             setLoading(true);
-            const response = await fetch(`${API_BASE_URL}/api/admin/verifications`);
-            const data = await response.json();
+            const token = localStorage.getItem('token');
+            console.log("Fetching pending verifications...");
+            
+            const response = await fetch(`${API_BASE_URL}/api/admin/verifications`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            
+            const text = await response.text();
+            let data;
+            try {
+                data = JSON.parse(text);
+            } catch (e) {
+                console.error("Failed to parse verifications JSON:", text);
+                throw new Error("Invalid server response format");
+            }
+
             if (data.success) {
                 setVerifications(data.verifications || []);
-                // Initialize decisions state
                 const initialDecisions = {};
                 data.verifications.forEach(v => {
                     initialDecisions[v.userId] = {
                         documents: {
-                            license: { status: v.documents?.license?.status || 'approved', reason: v.documents?.license?.reason || '' },
-                            rc: { status: v.documents?.rc?.status || 'approved', reason: v.documents?.rc?.reason || '' },
-                            insurance: { status: v.documents?.insurance?.status || 'approved', reason: v.documents?.insurance?.reason || '' }
+                            license: { 
+                                status: v.documents?.license?.status || 'pending', 
+                                reason: v.documents?.license?.reason || '' 
+                            },
+                            rc: { 
+                                status: v.documents?.rc?.status || 'pending', 
+                                reason: v.documents?.rc?.reason || '' 
+                            },
+                            insurance: { 
+                                status: v.documents?.insurance?.status || 'pending', 
+                                reason: v.documents?.insurance?.reason || '' 
+                            }
                         },
-                        promoteToDriver: false
+                        promoteToDriver: v.role === 'user+driver'
                     };
                 });
                 setDecisions(initialDecisions);
+                console.log("Verifications loaded:", data.verifications.length);
             }
         } catch (error) {
             console.error('Error fetching verifications:', error);
@@ -42,6 +65,7 @@ const AdminVerificationPage = () => {
     };
 
     const updateStatus = (userId, docType, status) => {
+        console.log(`Updating ${docType} status to ${status} for ${userId}`);
         setDecisions(prev => ({
             ...prev,
             [userId]: {
@@ -79,8 +103,10 @@ const AdminVerificationPage = () => {
 
     const handleSubmit = async (userId) => {
         const userDecision = decisions[userId];
+        const token = localStorage.getItem('token');
         
-        // Validation: Reject must include reason
+        console.log("Finalizing decision for user:", userId, userDecision);
+        
         const rejectedDocs = Object.entries(userDecision.documents).filter(([_, doc]) => doc.status === 'rejected');
         const missingReasons = rejectedDocs.some(([_, doc]) => !doc.reason.trim());
         
@@ -89,7 +115,6 @@ const AdminVerificationPage = () => {
             return;
         }
 
-        // Logic check: Promote as driver only if all are approved
         const allApproved = Object.values(userDecision.documents).every(doc => doc.status === 'approved');
         if (userDecision.promoteToDriver && !allApproved) {
             setMessage({ text: 'Promote as Driver is only allowed if ALL documents are approved', type: 'error' });
@@ -98,32 +123,40 @@ const AdminVerificationPage = () => {
 
         try {
             setLoading(true);
-            const response = await fetch(`${API_BASE_URL}/api/admin/verify-user`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+            const response = await fetch(`${API_BASE_URL}/api/admin/finalize-verification/${userId}`, {
+                method: 'PUT',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
                 body: JSON.stringify({
-                    userId,
                     documents: userDecision.documents,
                     promoteToDriver: userDecision.promoteToDriver
                 }),
             });
 
-            const data = await response.json();
+            const text = await response.text();
+            console.log("Raw response from finalize:", text);
+
+            let data;
+            try {
+                data = JSON.parse(text);
+            } catch (err) {
+                console.error("Finalize JSON parse error. Raw text:", text);
+                throw new Error("Server returned non-JSON response");
+            }
+
             if (data.success) {
-                setMessage({ text: 'Decision finalized for user', type: 'success' });
-                
-                // Part 6: Auto-refresh administration list instantly
+                setMessage({ text: 'Decision finalized successfully', type: 'success' });
                 setVerifications(prev => prev.filter(v => v.userId !== userId));
                 setExpandedUser(null);
-
-                // Toast cleanup after 3s
                 setTimeout(() => setMessage({ text: '', type: '' }), 3000);
             } else {
-                throw new Error(data.message);
+                throw new Error(data.message || 'Verification failed');
             }
         } catch (error) {
-            console.error('Finalize error:', error);
-            setMessage({ text: error.message || 'Failed to finalize decision', type: 'error' });
+            console.error('Finalize execution error:', error);
+            setMessage({ text: error.message || 'Connection fault during finalization', type: 'error' });
         } finally {
             setLoading(false);
         }

@@ -1732,22 +1732,29 @@ def get_verifications():
                 "documents": user.get("documents", {}),
                 "verificationStatus": user.get("verificationStatus", "pending")
             })
-
         print(f"[ADMIN] Pending verification users: {len(result)}")
         return jsonify({"success": True, "verifications": result}), 200
     except Exception as e:
         print(f"Admin Get Verifications Error: {e}")
         return jsonify({"success": False, "message": "Database error"}), 500
 
-@app.route('/api/admin/verify-user', methods=['POST', 'OPTIONS'])
-def verify_user_decision():
+@app.route('/api/admin/verify-user', methods=['POST', 'PUT', 'OPTIONS'])
+@app.route('/api/admin/finalize-verification/<user_id_url>', methods=['PUT', 'OPTIONS'])
+def verify_user_decision(user_id_url=None):
+    """
+    Consolidated verification decision route.
+    Handles legacy POST /api/admin/verify-user and new RESTful PUT.
+    """
+    if request.method == "OPTIONS":
+        return handle_options("admin/verify-user")
+        
     data = safe_json()
-
-    user_id = data.get("userId")
+    user_id = user_id_url or data.get("userId")
     documents = data.get("documents")
     promote = data.get("promoteToDriver")
 
     if not user_id or not documents:
+        print(f"[VERIFY ERROR] Missing data for {user_id}: {documents}")
         return jsonify({"success": False, "message": "Missing required verification data"}), 400
 
     try:
@@ -1756,6 +1763,8 @@ def verify_user_decision():
         
         # Build dynamic $set for each document type provided
         for doc_type, doc_info in documents.items():
+            if not isinstance(doc_info, dict): continue
+            
             if "status" in doc_info:
                 update_data[f"documents.{doc_type}.status"] = doc_info["status"]
             if "reason" in doc_info:
@@ -1763,7 +1772,7 @@ def verify_user_decision():
             update_data[f"documents.{doc_type}.updatedAt"] = datetime.now()
 
         # Calculate overall verification status
-        uploaded_docs = [doc for doc in documents.values() if doc.get("url")]
+        uploaded_docs = [doc for doc in documents.values() if isinstance(doc, dict) and doc.get("url")]
         if uploaded_docs:
             all_approved = all(doc.get("status") == "approved" for doc in uploaded_docs)
             overall_status = "approved" if all_approved else "rejected"
@@ -1773,33 +1782,31 @@ def verify_user_decision():
         update_data["verificationStatus"] = overall_status
         update_data["isVerified"] = (overall_status == "approved")
 
-        # Part 1: Logic Synchronization with Phase 4.5 Requirements
-        # If all docs are approved AND "Promote as Driver" is checked
+        # Part 1: Promote as Driver Logic
         final_role = "user"
         if overall_status == "approved":
             if promote:
                 final_role = "user+driver"
             else:
-                # Role remains user if not promoted
                 final_role = "user"
 
         update_data["role"] = final_role
 
-        # 1. Update the database using dot notation to prevent overwriting whole 'documents' object
+        # Update the database
         users_col.update_one(
             {"_id": ObjectId(user_id)},
             {"$set": update_data}
         )
 
-        # Part 5: Add console log after update
-        print(f"[ADMIN] Decision Finalized for: {user_id} - Role: {final_role} - Status: {overall_status}")
+        # Part 5: Log after update
+        print(f"[ADMIN] Decision Finalized for: {user_id} - Status: {overall_status}")
 
-        # Re-architected Notification Loop using create_notification foundation
+        # Send Notifications (using foundation from previous turns)
         notif_type = "KYC_APPROVED" if overall_status == "approved" else "KYC_REJECTED"
         rejection_reason = ""
         
         if overall_status == "rejected":
-            reasons = [f"{k.upper()}: {v.get('reason')}" for k, v in documents.items() if v.get('status') == 'rejected']
+            reasons = [f"{k.upper()}: {v.get('reason')}" for k, v in documents.items() if isinstance(v, dict) and v.get('status') == 'rejected']
             if reasons:
                 rejection_reason = " | Reasons: " + ", ".join(reasons)
 
@@ -1812,17 +1819,45 @@ def verify_user_decision():
         )
         send_push_notification(user_id, f"Verification {overall_status.capitalize()}", f"Your verification is {overall_status}", {"type": "verification"})
 
-        # Special Notification: Role Upgraded to Driver
+        # Special Notification: Role Upgraded
         if promote and overall_status == "approved":
             create_notification(
                 user_id=user_id,
                 title="Driver Access Granted",
-                message="Congratulations! Your driving privileges are now active. You can now post and manage rides.",
+                message="Congratulations! Your driving privileges are now active.",
                 notify_type="ROLE_UPGRADED"
             )
+            
+        return jsonify({"success": True, "message": "Decision finalized"}), 200
+        
     except Exception as e:
-        print(f"Admin Verify User Error: {e}")
-        return jsonify({"success": False, "message": "Database error"}), 500
+        print(f"Admin Verify User Error for {user_id}: {e}")
+        return jsonify({"success": False, "message": "Database error", "error": str(e)}), 500
+
+@app.route("/api/admin/verify-document/<user_id>", methods=["PUT", "OPTIONS"])
+def verify_document_rest(user_id):
+    """Update a specific document status RESTfully."""
+    if request.method == "OPTIONS":
+        return handle_options(f"admin/verify-document/{user_id}")
+        
+    data = safe_json()
+    doc_type = data.get('type')
+    status = data.get('status')
+    reason = data.get('reason', '')
+    
+    if not doc_type or not status:
+        return jsonify({"success": False, "message": "Missing document type or status"}), 400
+        
+    try:
+        update_data = {
+            f"documents.{doc_type}.status": status,
+            f"documents.{doc_type}.reason": reason,
+            f"documents.{doc_type}.updatedAt": datetime.now()
+        }
+        users_col.update_one({"_id": ObjectId(user_id)}, {"$set": update_data})
+        return jsonify({"success": True, "message": f"Document {doc_type} updated"}), 200
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
 
 @app.route('/api/admin/update-user-status', methods=['POST', 'OPTIONS'])
 def update_user_status():
