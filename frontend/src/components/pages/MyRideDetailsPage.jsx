@@ -492,18 +492,18 @@ function MyRideDetailsPage() {
                       </div>
                     </div>
                     <div className={`px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest border ${
-                      p.joined 
+                      (p.joined || p.status === 'joined')
                         ? 'bg-emerald-50 text-emerald-600 border-emerald-100' 
                         : 'bg-gray-50 text-gray-400 border-gray-100'
                     }`}>
-                      {p.joined ? '● Checked In' : '○ Not Joined'}
+                      {(p.joined || p.status === 'joined') ? '● Checked In' : '○ Not Joined'}
                     </div>
                   </div>
                 ))}
               </div>
 
               {/* Passenger Check-in Action */}
-              {ride.role === 'Passenger' && ride.status === 'ongoing' && !((ride.passengers || []).find(p => p.user === currentUserId)?.joined || (ride.passengers || []).find(p => p.user === currentUserId)?.status === 'joined') && (
+              {ride.role === 'Passenger' && ride.status === 'ongoing' && !((ride.passengers || []).find(p => String(p.userId || p.user) === String(currentUserId))?.joined || (ride.passengers || []).find(p => String(p.userId || p.user) === String(currentUserId))?.status === 'joined') && (
                 <button
                   onClick={handleCheckIn}
                   className="w-full bg-emerald-500 text-white py-4 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] shadow-lg shadow-emerald-500/20 hover:bg-emerald-600 active:scale-95 transition-all mt-4"

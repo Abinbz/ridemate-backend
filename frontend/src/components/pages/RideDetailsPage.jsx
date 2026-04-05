@@ -13,9 +13,12 @@ function RideDetailsPage() {
   const userId = localStorage.getItem('userId');
 
   // Helper: Find user status in manifest
-  const passengerRecord = Array.isArray(ride.passengers) ? ride.passengers.find(p => p.user === userId) : null;
+  const currentUserId = localStorage.getItem('userId');
+  const passengerRecord = ride?.passengers?.find(p => 
+    String(p.userId || p.user) === String(currentUserId)
+  );
   const isBooked = !!passengerRecord;
-  const isJoined = passengerRecord?.status === 'joined' || passengerRecord?.joined;
+  const isJoined = passengerRecord?.status === 'joined' || passengerRecord?.joined === true;
   const isDriver = (ride.createdBy || ride.driverId) === userId;
   const isBanned = userData?.isBanned;
   const rideStatus = ride.status?.toLowerCase();

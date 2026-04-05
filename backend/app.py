@@ -624,18 +624,26 @@ def search_rides():
     user_end_lng = data.get('endLng')
 
     try:
-        # Initial extraction of all possible rides
+        print(f"[SEARCH] fetching rides for user: {user_id}")
+        
+        # Optimized query: Find upcoming rides with seats AND exclude user if already booked
         query = {
             "status": "upcoming",
-            "capacity": {"$gt": 0} # Must have available seats
+            "capacity": {"$gt": 0}
         }
-        # Only add date to query if it's actually provided and not empty
+        
+        if user_id:
+            # Prevent showing rides the user is already a part of
+            query["$and"] = [
+                {"passengers.userId": {"$ne": user_id}},
+                {"passengers.user": {"$ne": user_id}} # Legacy field support
+            ]
+            
         if data.get('date'):
             query["date"] = data.get('date')
             
         all_rides_cursor = rides_col.find(query)
         all_rides = []
-        user_id = data.get('userId')
         
         for doc in all_rides_cursor:
             ride = parse_json(doc)
@@ -975,32 +983,35 @@ def book_ride_rest(ride_id=None):
             return jsonify({"success": False, "message": f"Ride is {ride.get('status')} and no longer bookable"}), 400
             
         passengers = ride.get('passengers', [])
-        if any(str(p.get('user')) == str(user_id) for p in passengers):
+        # Prevent duplicate booking
+        if any(str(p.get('userId') or p.get('user')) == str(user_id) for p in passengers):
             return jsonify({"success": False, "message": "Already booked"}), 400
             
-        if len(passengers) >= int(ride.get('capacity', 1)):
-             return jsonify({"success": False, "message": "Ride is full"}), 400
+        if int(ride.get('capacity', 0)) <= 0:
+             return jsonify({"success": False, "message": "No seats available"}), 400
              
         user = users_col.find_one({"_id": ObjectId(user_id)})
         if user.get('isBanned'):
             return jsonify({"success": False, "message": "Account restricted"}), 403
             
-        # Add passenger and decrement available capacity atomically
+        # Add passenger with both IDs for backward compatibility and decrement capacity
         new_passenger = {
-            "user": user_id,
+            "userId": user_id, # Standard field
+            "user": user_id,   # Legacy field support
             "name": user.get('name') or user.get('username'),
             "collegeId": user.get('collegeId', 'N/A'),
-            "status": "booked",
-            "joined": False
+            "status": "booked"
         }
         
         rides_col.update_one(
             {"_id": ObjectId(ride_id)},
             {
                 "$push": {"passengers": new_passenger},
-                "$inc": {"capacity": -1} # Atomically consume a seat
+                "$inc": {"capacity": -1}
             }
         )
+        
+        print(f"[BOOK] {user_id} → ride {ride_id}")
         
         # Notify driver
         driver_id = ride.get('driverId') or ride.get('createdBy')
@@ -1009,7 +1020,7 @@ def book_ride_rest(ride_id=None):
             title="New Passenger",
             message=f"{new_passenger['name']} booked a seat on your ride to {ride.get('toLocation')}.",
             notify_type="PASSENGER_JOINED",
-            data={"rideId": ride_id}
+            data={"rideId": str(ride_id)}
         )
 
         # Notify passenger
@@ -1224,6 +1235,10 @@ def get_my_rides_v2(user_id):
 
 @app.route("/api/cancel-ride-passenger", methods=["POST", "OPTIONS"])
 def cancel_ride_passenger():
+    """Passenger booking termination (logic standard fix)."""
+    if request.method == "OPTIONS":
+        return handle_options("cancel-ride-passenger")
+        
     data = safe_json()
     ride_id = data.get('rideId')
     user_id = data.get('userId')
@@ -1232,49 +1247,49 @@ def cancel_ride_passenger():
         return jsonify({"success": False, "message": "Missing rideId or userId"}), 400
         
     try:
-        # 1. Fetch ride details before updating to notify driver
         ride = rides_col.find_one({"_id": ObjectId(ride_id)})
         if not ride:
             return jsonify({"success": False, "message": "Ride not found"}), 404
             
+        # Safety Check: Is user actually in this ride?
+        passengers = ride.get('passengers', [])
+        if not any(str(p.get('userId') or p.get('user')) == str(user_id) for p in passengers):
+             return jsonify({"success": False, "message": "User not in ride"}), 400
+             
+        # Guard: Cannot cancel a completed ride
         if ride.get('status') == 'completed':
             return jsonify({"success": False, "message": "Cannot cancel a completed ride"}), 400
             
-        driver_id = ride.get('createdBy')
-        route_str = f"{ride.get('from')} → {ride.get('to')}"
+        # Filter out the cancelling user
+        updated_passengers = [
+            p for p in passengers 
+            if str(p.get('userId') or p.get('user')) != str(user_id)
+        ]
         
-        # 2. Fetch cancelling user's name
-        user = users_col.find_one({"_id": ObjectId(user_id)})
-        user_name = user.get('name') or user.get('username', 'A User')
-        
-        # 3. Pull user from passengers list and increment available capacity
-        result = rides_col.update_one(
+        # Atomic Update: Remove from list AND increase capacity. DO NOT TOUCH STATUS.
+        rides_col.update_one(
             {"_id": ObjectId(ride_id)},
             {
-                "$pull": {
-                    "passengers": {"user": user_id},
-                    "bookedUsers": user_id, # Cleanup legacy if present
-                    "passengerDetails": {"userId": user_id} # Cleanup legacy if present
-                },
-                "$inc": {"capacity": 1} # Atomic seat restoration
+                "$set": {"passengers": updated_passengers},
+                "$inc": {"capacity": 1}
             }
         )
         
-        # 4. Notify Driver
+        print(f"[CANCEL] {user_id} removed from ride {ride_id}")
+        
+        # Notify Driver
+        driver_id = ride.get('driverId') or ride.get('createdBy')
         if driver_id:
-            notifications_col.insert_one({
-                "userId": driver_id,
-                "fromId": user_id,
-                "type": "cancel",
-                "title": "Booking Cancelled",
-                "message": f"{user_name} cancelled their booking for {route_str}",
-                "isRead": False,
-                "createdAt": datetime.now()
-            })
-            send_push_notification(driver_id, "Booking Cancelled", f"{user_name} cancelled their booking for {route_str}", {"type": "cancel"})
+            route_str = f"{ride.get('from')} → {ride.get('to')}"
+            create_notification(
+                user_id=driver_id,
+                title="Booking Cancelled",
+                message=f"A passenger cancelled their booking for {route_str}",
+                notify_type="cancel",
+                data={"rideId": str(ride_id)}
+            )
             
-        print(f"Passenger {user_name} cancelled booking for ride {ride_id}")
-        return jsonify({"success": True, "message": "Ride cancelled successfully"}), 200
+        return jsonify({"success": True, "message": "Booking cancelled"}), 200
         
     except Exception as e:
         print(f"Cancel Passenger Error: {e}")
@@ -1322,7 +1337,7 @@ def cancel_ride_driver():
             {"$set": {"status": "cancelled"}}
         )
         
-        print(f"Driver marked ride {ride_id} as cancelled")
+        print(f"[CANCEL] Driver {user_id} cancelled entire ride {ride_id}")
         return jsonify({"success": True, "message": "Ride cancelled successfully"}), 200
         
     except Exception as e:
@@ -1349,6 +1364,7 @@ def cancel_ride(ride_id):
             {"_id": ObjectId(ride_id)},
             {"$set": {"status": "cancelled"}}
         )
+        print(f"[CANCEL] Ride {ride_id} cancelled via generic DELETE route")
         return jsonify({"success": True, "message": "Ride cancelled successfully"}), 200
     except Exception as e:
         print(f"Generic Cancel Error: {e}")
