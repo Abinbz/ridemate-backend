@@ -6,9 +6,22 @@ function ResultsPage() {
   const location = useLocation();
   const searchParams = location.state?.searchData || {};
   const searchResponseData = location.state?.searchResponseData;
-  const displayRecommended = searchResponseData?.recommended || [];
-  const displayOthers = searchResponseData?.others || [];
-  const totalMatches = displayRecommended.length + displayOthers.length;
+  const normalize = (str) => (str || "").toLowerCase().trim();
+  const search = { from: searchParams.startingFrom, to: searchParams.goingTo };
+
+  const allRides = [
+    ...(searchResponseData?.recommended || []),
+    ...(searchResponseData?.others || [])
+  ];
+
+  const filteredRides = allRides.filter((ride) =>
+    normalize(ride.from).includes(normalize(search.from)) &&
+    normalize(ride.to).includes(normalize(search.to))
+  );
+
+  const displayRecommended = filteredRides.slice(0, 2);
+  const displayOthers = filteredRides.slice(2);
+  const totalMatches = filteredRides.length;
 
   const renderRideCard = (ride, isRecommended = false) => (
     <div

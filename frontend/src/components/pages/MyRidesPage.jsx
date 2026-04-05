@@ -100,7 +100,7 @@ function MyRidesPage() {
       if (response.ok && data.success) {
         setRides({
           posted: data.posted || { upcoming: [], ongoing: [], completed: [] },
-          booked: data.booked || { upcoming: [], ongoing: [], completed: [] }
+          booked: data.booked || []
         });
       }
     } catch (err) {
@@ -143,6 +143,7 @@ function MyRidesPage() {
 
   const totalRidesInTab = () => {
     const tabData = rides[activeTab];
+    if (activeTab === 'booked') return tabData.length || 0;
     return (tabData.upcoming?.length || 0) + (tabData.ongoing?.length || 0) + (tabData.completed?.length || 0);
   };
 
@@ -189,6 +190,18 @@ function MyRidesPage() {
               >
                 {activeTab === 'posted' ? 'Offer a Ride' : 'Find a Ride'}
               </button>
+            </div>
+          ) : activeTab === 'booked' ? (
+            <div className="space-y-4">
+              {rides.booked.map((ride) => (
+                <RideCard
+                  key={ride.id || ride._id}
+                  ride={ride}
+                  activeTab={activeTab}
+                  onJoin={handleJoinRide}
+                  onClick={() => navigate('/user/my-rides/details', { state: { ride } })}
+                />
+              ))}
             </div>
           ) : (
             sections.map((section, sIndex) => {

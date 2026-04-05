@@ -1167,11 +1167,15 @@ def get_my_rides_v2(user_id):
             key = ride["status"].lower()
             if key in posted: posted[key].append(ride)
 
-        # Booked: bookedUsers list or passengers[].user
-        for doc in rides_col.find({"$or": [{"bookedUsers": user_id}, {"passengers.user": user_id}]}):
+        # Booked: Specific userId match for stabilization
+        booked_cursor = rides_col.find({
+            "passengers.userId": user_id
+        })
+        
+        booked = []
+        for doc in booked_cursor:
             ride = _normalize_ride(doc, "Passenger", current_date_str)
-            key = ride["status"].lower()
-            if key in booked: booked[key].append(ride)
+            booked.append(ride)
 
         total = sum(len(v) for v in posted.values()) + sum(len(v) for v in booked.values())
         print(f"My Rides for {user_id}: {total} total")
