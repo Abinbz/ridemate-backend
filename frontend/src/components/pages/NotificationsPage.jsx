@@ -14,7 +14,8 @@ const NotificationsPage = () => {
 
     const fetchNotifications = async () => {
         try {
-            const response = await fetch(`${API_BASE_URL}/api/notifications/${userId}`);
+            // Using standardized GET /api/notifications?userId=...
+            const response = await fetch(`${API_BASE_URL}/api/notifications?userId=${userId}`);
             const data = await response.json();
             if (data.success) {
                 setNotifications(data.notifications || []);
@@ -26,33 +27,35 @@ const NotificationsPage = () => {
         }
     };
 
-    const markAsRead = async (notifId) => {
+    const markAllAsRead = async () => {
         try {
-            const response = await fetch(`${API_BASE_URL}/api/notifications/read/${notifId}`, {
-                method: 'POST'
+            // Using standardized PUT /api/notifications/read
+            const response = await fetch(`${API_BASE_URL}/api/notifications/read`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId })
             });
             const data = await response.json();
             if (data.success) {
-                setNotifications(prev => 
-                    prev.map(n => n._id === notifId ? { ...n, isRead: true } : n)
-                );
+                setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
             }
         } catch (error) {
-            console.error('Error marking as read:', error);
+            console.error('Error marking all as read:', error);
         }
     };
 
-    const getIcon = (type, title = "") => {
-        if (type === 'admin-action') {
-            if (title.includes('Restricted')) return '🚫';
-            if (title.includes('Restored')) return '✅';
-            if (title.includes('Role')) return '🔄';
-            return '🛡️';
-        }
+    const getIcon = (type) => {
         switch (type) {
+            case 'KYC_APPROVED': return '✅';
+            case 'KYC_REJECTED': return '❌';
+            case 'USER_BANNED': return '🚫';
+            case 'ROLE_UPGRADED': return '🏎️';
+            case 'RIDE_ACCEPTED': return '🤝';
+            case 'RIDE_STARTED': return '🚗';
+            case 'RIDE_COMPLETED': return '🏁';
+            case 'PASSENGER_JOINED': return '🧑‍🤝‍🧑';
             case 'verification': return '🛡️';
-            case 'driver': return '🪪';
-            case 'system': return '⚙️';
+            case 'admin-action': return '⚙️';
             default: return '🔔';
         }
     };
@@ -66,20 +69,31 @@ const NotificationsPage = () => {
         );
     }
 
+    const unreadCount = notifications.filter(n => !n.isRead).length;
+
     return (
         <div className="p-6 max-w-2xl mx-auto space-y-8 pb-32">
-            <header className="space-y-1">
-                <h1 className="text-3xl font-black tracking-tighter text-black uppercase leading-none">System Alerts</h1>
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.3em]">Operational Intelligence Feed</p>
+            <header className="flex justify-between items-end">
+                <div className="space-y-1">
+                    <h1 className="text-3xl font-black tracking-tighter text-black uppercase leading-none">System Alerts</h1>
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.3em]">Operational Intelligence Feed</p>
+                </div>
+                {unreadCount > 0 && (
+                    <button 
+                        onClick={markAllAsRead}
+                        className="text-[10px] font-black text-blue-600 uppercase tracking-widest hover:underline"
+                    >
+                        Mark all as read
+                    </button>
+                )}
             </header>
 
             <div className="space-y-4">
                 {notifications.length > 0 ? (
                     notifications.map((notif) => (
                         <div 
-                            key={notif._id}
-                            onClick={() => !notif.isRead && markAsRead(notif._id)}
-                            className={`p-6 rounded-[2rem] border transition-all duration-500 cursor-pointer ${
+                            key={notif.id || notif._id}
+                            className={`p-6 rounded-[2rem] border transition-all duration-500 ${
                                 notif.isRead 
                                 ? 'bg-white border-gray-100 opacity-60' 
                                 : 'bg-white border-black shadow-xl scale-[1.02]'
@@ -89,7 +103,7 @@ const NotificationsPage = () => {
                                 <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-xl shadow-sm ${
                                     notif.isRead ? 'bg-gray-50' : 'bg-black text-white'
                                 }`}>
-                                    {getIcon(notif.type, notif.title)}
+                                    {getIcon(notif.type)}
                                 </div>
                                 <div className="space-y-1 flex-1">
                                     <div className="flex justify-between items-start">

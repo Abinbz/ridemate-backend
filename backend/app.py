@@ -212,6 +212,30 @@ def send_push_notification(user_id, title, body, data=None):
         print(f"[FCM Error] Push failed for {user_id}: {e}")
 
 
+def create_notification(user_id, title, message, notify_type, data=None):
+    """
+    Standardized notification service to save a notification to the DB.
+    Enforces fields: userId, title, message, type, data, isRead, createdAt.
+    """
+    try:
+        # Enforce consistency with requested MERN-style model
+        notif_doc = {
+            "userId": str(user_id),
+            "title": title,
+            "message": message,
+            "type": notify_type, # e.g. RIDE_ACCEPTED, PASSENGER_JOINED
+            "data": data or {},
+            "isRead": False,
+            "createdAt": datetime.now()
+        }
+        result = notifications_col.insert_one(notif_doc)
+        print(f"[Notif Service] Created {notify_type} notification for {user_id}")
+        return str(result.inserted_id)
+    except Exception as e:
+        print(f"[Notif Service Error] Failed to create notification: {e}")
+        return None
+
+
 @app.route("/", methods=["GET"])
 def root():
     return jsonify({"message": "RideMate API running"}), 200
@@ -955,22 +979,31 @@ def join_ride():
             }
         )
 
-        # Notify driver about new booking
+        # 1. Notify driver about new booking (PASSENGER_JOINED)
         driver_id = ride.get('driverId') or ride.get('createdBy')
         p_name = user.get('name') or user.get('username', 'Someone')
         p_rating = user.get('rating', 0)
         route_str = f"{ride.get('from') or ride.get('fromLocation', '')} → {ride.get('to') or ride.get('toLocation', '')}"
+        
         if driver_id:
-            notifications_col.insert_one({
-                "userId": driver_id,
-                "fromId": user_id,
-                "type": "booking",
-                "title": "New Booking",
-                "message": f"{p_name} (⭐{p_rating}) joined your ride ({route_str})",
-                "isRead": False,
-                "createdAt": datetime.now()
-            })
+            create_notification(
+                user_id=driver_id,
+                title="New Booking",
+                message=f"{p_name} (⭐{p_rating}) joined your ride ({route_str})",
+                notify_type="PASSENGER_JOINED",
+                data={"rideId": ride_id, "passengerId": user_id}
+            )
             send_push_notification(driver_id, "New Booking", f"{p_name} (⭐{p_rating}) joined your ride ({route_str})", {"type": "booking"})
+
+        # 2. Notify passenger that their booking is confirmed (RIDE_ACCEPTED)
+        create_notification(
+            user_id=user_id,
+            title="Booking Confirmed",
+            message=f"You have joined the ride: {route_str}. Trip is confirmed!",
+            notify_type="RIDE_ACCEPTED",
+            data={"rideId": ride_id}
+        )
+        send_push_notification(user_id, "Booking Confirmed", f"You have joined the ride: {route_str}", {"type": "booking"})
 
         return jsonify({"success": True, "message": "Ride joined successfully"}), 200
     except Exception as e:
@@ -995,18 +1028,16 @@ def start_ride():
             
         rides_col.update_one({"_id": ObjectId(ride_id)}, {"$set": {"status": "ongoing"}})
         
-        # Notify passengers that ride has started
+        # Notify passengers that ride has started using standardized service
         route_str = f"{ride.get('from') or ride.get('fromLocation', '')} → {ride.get('to') or ride.get('toLocation', '')}"
         for pid in ride.get('bookedUsers', []):
-            notifications_col.insert_one({
-                "userId": pid,
-                "fromId": user_id,
-                "type": "ride_update",
-                "title": "Ride Started",
-                "message": f"Your ride ({route_str}) has started. Have a safe trip!",
-                "isRead": False,
-                "createdAt": datetime.now()
-            })
+            create_notification(
+                user_id=pid,
+                title="Ride Started",
+                message=f"Your ride ({route_str}) has started. Have a safe trip!",
+                notify_type="RIDE_STARTED",
+                data={"rideId": ride_id}
+            )
             send_push_notification(pid, "Ride Started", f"Your ride ({route_str}) has started. Have a safe trip!", {"type": "ride_update"})
         
         return jsonify({"success": True, "message": "Ride started"}), 200
@@ -1031,19 +1062,28 @@ def end_ride():
 
         rides_col.update_one({"_id": ObjectId(ride_id)}, {"$set": {"status": "completed"}})
         
-        # Notify passengers that ride has ended
+        # Notify driver + passengers that ride has ended
         route_str = f"{ride.get('from') or ride.get('fromLocation', '')} → {ride.get('to') or ride.get('toLocation', '')}"
+        
+        # 1. Notify passengers (RIDE_COMPLETED)
         for pid in ride.get('bookedUsers', []):
-            notifications_col.insert_one({
-                "userId": pid,
-                "fromId": user_id,
-                "type": "ride_update",
-                "title": "Ride Completed",
-                "message": f"Your ride ({route_str}) is complete. Don't forget to rate your driver!",
-                "isRead": False,
-                "createdAt": datetime.now()
-            })
+            create_notification(
+                user_id=pid,
+                title="Ride Completed",
+                message=f"Your ride ({route_str}) is complete. Don't forget to rate your driver!",
+                notify_type="RIDE_COMPLETED",
+                data={"rideId": ride_id}
+            )
             send_push_notification(pid, "Ride Completed", f"Your ride ({route_str}) is complete. Don't forget to rate your driver!", {"type": "ride_update"})
+            
+        # 2. Notify driver (RIDE_COMPLETED)
+        create_notification(
+            user_id=user_id,
+            title="Ride Summary",
+            message=f"You have successfully completed the ride ({route_str}). Well done!",
+            notify_type="RIDE_COMPLETED",
+            data={"rideId": ride_id}
+        )
         
         return jsonify({"success": True, "message": "Ride completed"}), 200
     except Exception as e:
@@ -1083,19 +1123,28 @@ def finish_ride_rest(ride_id):
         # Update status to completed
         rides_col.update_one({"_id": ObjectId(ride_id)}, {"$set": {"status": "completed"}})
         
-        # Notify passengers (same pattern as end_ride)
+        # Notify driver + passengers (using standardized service)
         route_str = f"{ride.get('from') or ride.get('fromLocation', '')} → {ride.get('to') or ride.get('toLocation', '')}"
+        
+        # 1. Notify passengers (RIDE_COMPLETED)
         for pid in ride.get('bookedUsers', []):
-            notifications_col.insert_one({
-                "userId": pid,
-                "fromId": user_id,
-                "type": "ride_update",
-                "title": "Ride Completed",
-                "message": f"Your ride ({route_str}) is complete. Don't forget to rate your driver!",
-                "isRead": False,
-                "createdAt": datetime.now()
-            })
+            create_notification(
+                user_id=pid,
+                title="Ride Completed",
+                message=f"Your ride ({route_str}) is complete. Don't forget to rate your driver!",
+                notify_type="RIDE_COMPLETED",
+                data={"rideId": ride_id}
+            )
             send_push_notification(pid, "Ride Completed", f"Your ride ({route_str}) is complete. Don't forget to rate your driver!", {"type": "ride_update"})
+            
+        # 2. Notify driver (RIDE_COMPLETED)
+        create_notification(
+            user_id=user_id,
+            title="Ride Summary",
+            message=f"You have successfully completed the ride ({route_str}). Well done!",
+            notify_type="RIDE_COMPLETED",
+            data={"rideId": ride_id}
+        )
         
         print(f"Ride Finished via REST API: {ride_id}")
         return jsonify({"success": True, "ride": parse_json(ride)}), 200
@@ -1464,60 +1513,65 @@ def mark_messages_read():
 
 # --- Notification Routes ---
 
-@app.route("/api/notifications/<user_id>", methods=["GET", "OPTIONS"])
-def get_notifications(user_id):
-    """Consolidated notifications route: returns list and unread count."""
-    try:
-        cursor = notifications_col.find(
-            {"userId": user_id}
-        ).sort("createdAt", -1).limit(50)
+@app.route("/api/notifications", methods=["GET", "OPTIONS"])
+def get_notifications_v2():
+    """Standardized GET /api/notifications → fetch user notifications."""
+    if request.method == "OPTIONS":
+        return handle_options("notifications")
         
+    user_id = request.args.get('userId')
+    if not user_id:
+        return jsonify({"success": False, "message": "Missing userId query parameter"}), 400
+        
+    try:
+        cursor = notifications_col.find({"userId": user_id}).sort("createdAt", -1).limit(50)
         notifs = []
         for doc in cursor:
             n = parse_json(doc)
-            # Ensure both id formats exist for compatibility across components
-            n["_id"] = n.get("_id")
-            if "_id" in n:
-                n["id"] = n["_id"]
+            n["id"] = n.get("_id")
             notifs.append(n)
-        
+            
         unread_count = notifications_col.count_documents({"userId": user_id, "isRead": False})
         
         return jsonify({
-            "success": True,
+            "success": True, 
             "notifications": notifs,
             "unreadCount": unread_count
         }), 200
     except Exception as e:
         print(f"Get Notifications Error: {e}")
-        return jsonify({"success": False, "message": str(e)}), 500
+        return jsonify({"success": False, "message": "Database error"}), 500
 
-@app.route("/api/notifications/mark-read", methods=["POST", "OPTIONS"])
-def mark_notifications_read():
+@app.route("/api/notifications/read", methods=["PUT", "OPTIONS"])
+def mark_notifications_read_v2():
+    """Standardized PUT /api/notifications/read → mark all as read."""
+    if request.method == "OPTIONS":
+        return handle_options("notifications/read")
+        
     data = safe_json()
     user_id = data.get('userId')
-    notif_id = data.get('notificationId')
     
     if not user_id:
         return jsonify({"success": False, "message": "Missing userId"}), 400
-    
+        
     try:
-        if notif_id:
-            # Mark single notification as read
-            notifications_col.update_one(
-                {"_id": ObjectId(notif_id), "userId": user_id},
-                {"$set": {"isRead": True}}
-            )
-        else:
-            # Mark all notifications as read
-            notifications_col.update_many(
-                {"userId": user_id, "isRead": False},
-                {"$set": {"isRead": True}}
-            )
-        return jsonify({"success": True, "message": "Notifications updated"}), 200
+        notifications_col.update_many(
+            {"userId": user_id, "isRead": False},
+            {"$set": {"isRead": True}}
+        )
+        return jsonify({"success": True, "message": "All notifications marked as read"}), 200
     except Exception as e:
         print(f"Mark Read Error: {e}")
         return jsonify({"success": False, "message": "Database error"}), 500
+
+# Legacy routes kept for compatibility 
+@app.route("/api/notifications/<user_id>", methods=["GET", "OPTIONS"])
+def get_notifications_legacy(user_id):
+    return get_notifications_v2()
+
+@app.route("/api/notifications/mark-read", methods=["POST", "OPTIONS"])
+def mark_notifications_read_legacy():
+    return mark_notifications_read_v2()
 
 @app.route("/api/notifications/unread-count/<user_id>", methods=["GET", "OPTIONS"])
 def get_unread_count(user_id):
@@ -1740,23 +1794,32 @@ def verify_user_decision():
         # Part 5: Add console log after update
         print(f"[ADMIN] Decision Finalized for: {user_id} - Role: {final_role} - Status: {overall_status}")
 
-        # Construct notification message
-        notification_msg = "Your documents have been approved!" if overall_status == "approved" else "Some of your documents were rejected."
+        # Re-architected Notification Loop using create_notification foundation
+        notif_type = "KYC_APPROVED" if overall_status == "approved" else "KYC_REJECTED"
+        rejection_reason = ""
         
         if overall_status == "rejected":
             reasons = [f"{k.upper()}: {v.get('reason')}" for k, v in documents.items() if v.get('status') == 'rejected']
             if reasons:
-                notification_msg = "Your document was rejected: " + ", ".join(reasons)
+                rejection_reason = " | Reasons: " + ", ".join(reasons)
 
-        # Create system notification
-        notifications_col.insert_one({
-            "userId": user_id,
-            "type": "verification",
-            "title": f"Verification {overall_status.capitalize()}",
-            "message": notification_msg,
-            "isRead": False,
-            "createdAt": datetime.now()
-        })
+        create_notification(
+            user_id=user_id,
+            title=f"Verification {overall_status.capitalize()}",
+            message=f"Your documents have been {overall_status}.{rejection_reason}",
+            notify_type=notif_type,
+            data={"overallStatus": overall_status}
+        )
+        send_push_notification(user_id, f"Verification {overall_status.capitalize()}", f"Your verification is {overall_status}", {"type": "verification"})
+
+        # Special Notification: Role Upgraded to Driver
+        if promote and overall_status == "approved":
+            create_notification(
+                user_id=user_id,
+                title="Driver Access Granted",
+                message="Congratulations! Your driving privileges are now active. You can now post and manage rides.",
+                notify_type="ROLE_UPGRADED"
+            )
     except Exception as e:
         print(f"Admin Verify User Error: {e}")
         return jsonify({"success": False, "message": "Database error"}), 500
@@ -1826,20 +1889,18 @@ def update_user_status():
             {"$set": update_fields}
         )
 
-        # Part 3: Dispatch Notifications
+        # Part 3: Dispatch Standardized Notifications
         for notif in notifications_to_send:
-            notifications_col.insert_one({
-                "userId": user_id,
-                "type": notif["type"],
-                "title": notif["title"],
-                "message": notif["message"],
-                "isRead": False,
-                "createdAt": datetime.now()
-            })
-            # Also trigger Push Notify (Firebase logic from previous turns)
-            # send_push_notification(user_id, notif["title"], notif["message"], {"type": "admin-action"})
+            create_notification(
+                user_id=user_id,
+                title=notif["title"],
+                message=notif["message"],
+                notify_type=notif["type"],
+                data=notif.get("data")
+            )
+            send_push_notification(user_id, notif["title"], notif["message"], {"type": notif["type"]})
 
-        print(f"[ADMIN ACTION] User {user_id} updated. Actions: {[n['title'] for n in notifications_to_send]}")
+        print(f"[ADMIN ACTION] User {user_id} updated. Notifications dispatched.")
         return jsonify({"success": True, "message": "User updated and notified"}), 200
 
     except Exception as e:
