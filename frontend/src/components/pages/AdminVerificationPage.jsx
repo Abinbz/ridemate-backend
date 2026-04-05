@@ -50,7 +50,7 @@ const AdminVerificationPage = () => {
                                 reason: v.documents?.insurance?.reason || '' 
                             }
                         },
-                        promoteToDriver: v.role === 'user+driver'
+                        promoteToDriver: v.role === 'driver'
                     };
                 });
                 setDecisions(initialDecisions);

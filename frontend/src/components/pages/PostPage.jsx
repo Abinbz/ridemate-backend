@@ -89,8 +89,8 @@ function PostPage() {
             if (data.success) {
                 setUserData(data.user);
                 
-                // Part 4.5: Role-Based Access + Banned check
-                const isDriver = data.user.role === "user+driver";
+                // Standardized Role-Based Access
+                const isDriver = data.user.role === "driver";
                 const isBanned = data.user.isBanned;
 
                 if (!isDriver || isBanned) {
@@ -265,8 +265,8 @@ function PostPage() {
     }
   };
 
-  // Part 4.5: Frontend - Role-Based Control
-  const isDriver = userData?.role === "user+driver";
+  // Standardized Role-Based Control
+  const isDriver = userData?.role === "driver";
   const isBanned = userData?.isBanned;
 
   return (

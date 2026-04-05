@@ -517,7 +517,7 @@ def post_ride():
             return jsonify({"success": False, "message": "Your account is restricted from posting rides."}), 403
 
         role = user.get("role", "user")
-        if role != "user+driver":
+        if role != "driver":
              # Unauthorized attempt logging
              print(f"[RIDE BLOCKED] User not verified driver: {user_id}")
              return jsonify({
@@ -1786,7 +1786,7 @@ def verify_user_decision(user_id_url=None):
         final_role = "user"
         if overall_status == "approved":
             if promote:
-                final_role = "user+driver"
+                final_role = "driver"
             else:
                 final_role = "user"
 
@@ -1824,7 +1824,7 @@ def verify_user_decision(user_id_url=None):
             create_notification(
                 user_id=user_id,
                 title="Driver Access Granted",
-                message="Congratulations! Your driving privileges are now active.",
+                message="Congratulations! Your driving privileges are now active. You can now post rides.",
                 notify_type="ROLE_UPGRADED"
             )
             
@@ -1918,16 +1918,41 @@ def update_user_status():
         if not update_fields:
             return jsonify({"success": True, "message": "No changes detected"}), 200
 
-        # Part 2: Execute Database Update
+        # Part 1: Migration fix - Standardize 'driver' role
+        if update_fields.get("role") == "user+driver":
+            update_fields["role"] = "driver"
+
+        # Part 2: Trigger Status Update
         users_col.update_one(
             {"_id": ObjectId(user_id)},
             {"$set": update_fields}
         )
 
         # Part 3: Dispatch Standardized Notifications
+        notifications_to_send = []
+        if "isBanned" in update_fields:
+            if update_fields["isBanned"]:
+                notifications_to_send.append({
+                    "title": "Account Restricted",
+                    "message": f"Your account has been restricted. Reason: {update_fields.get('banReason', 'Policy Violation')}",
+                    "type": "USER_BANNED"
+                })
+            else:
+                notifications_to_send.append({
+                    "title": "Account Restored",
+                    "message": "Good news! Your account access has been restored.",
+                    "type": "admin-action"
+                })
+        
+        if "role" in update_fields:
+            notifications_to_send.append({
+                "title": "Role Updated",
+                "message": f"Your system role has been changed to: {update_fields['role']}",
+                "type": "ROLE_UPGRADED" if update_fields['role'] == "driver" else "admin-action"
+            })
         for notif in notifications_to_send:
             create_notification(
-                user_id=user_id,
+                user_id=str(user_id),
                 title=notif["title"],
                 message=notif["message"],
                 notify_type=notif["type"],

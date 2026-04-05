@@ -27,19 +27,6 @@ const AdminUsersPage = () => {
         }
     };
 
-    const filteredUsers = users.filter(user => 
-        user.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user.username?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user.email?.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-
-    if (loading) {
-        return (
-            <div className="flex items-center justify-center min-h-[60vh]">
-                <div className="w-8 h-8 border-4 border-black border-t-transparent rounded-full animate-spin"></div>
-            </div>
-        );
-    }
 
     return (
         <div className="p-6 space-y-6">
@@ -112,7 +99,7 @@ const AdminUsersPage = () => {
                                         className="flex-1 bg-gray-50 border-none rounded-xl px-4 py-2 text-[9px] font-black uppercase tracking-widest focus:ring-1 ring-black transition-all appearance-none cursor-pointer"
                                     >
                                         <option value="user">👤 User</option>
-                                        <option value="user+driver">🏎️ Driver</option>
+                                        <option value="driver">🏎️ Driver</option>
                                         <option value="admin">🛡️ Admin</option>
                                     </select>
 
@@ -150,23 +137,6 @@ const AdminUsersPage = () => {
             </div>
         </div>
     );
-};
-
-// ... existing helper logic ...
-const handleUpdateStatus = async (userId, payload) => {
-    try {
-        const response = await fetch(`${API_BASE_URL}/api/admin/update-user-status`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId, ...payload })
-        });
-        const data = await response.json();
-        if (data.success) {
-            window.location.reload(); // Simple refresh for now to sync all states
-        }
-    } catch (error) {
-        console.error('Update status error:', error);
-    }
 };
 
 export default AdminUsersPage;
