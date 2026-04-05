@@ -242,6 +242,18 @@ def create_notification(user_id, title, message, notify_type, data=None):
         return None
 
 
+def check_if_banned(user_id):
+    """Utility to verify if a user is currently banned from platform actions."""
+    if not user_id:
+        return False
+    try:
+        uid = ObjectId(user_id) if ObjectId.is_valid(user_id) else user_id
+        user = users_col.find_one({"_id": uid}, {"isBanned": 1})
+        return user and user.get("isBanned", False)
+    except Exception as e:
+        print(f"[BAN CHECK ERROR] {e}")
+        return False
+
 @app.route("/", methods=["GET"])
 def root():
     return jsonify({"message": "RideMate API running"}), 200
@@ -358,8 +370,12 @@ def login():
 
             if check_password_hash(stored_hash, provided_pass):
                 # Check if user is blocked or banned
-                if user.get('isBlocked', False) or user.get('isBanned', False):
-                    print(f"DEBUG: Blocked/Banned user attempted login: {user['username']}")
+                if user.get('isBanned', False):
+                    print(f"DEBUG: Banned user attempted login: {user['username']}")
+                    return jsonify({"success": False, "message": "Your account has been banned from using this platform."}), 403
+                
+                if user.get('isBlocked', False):
+                    print(f"DEBUG: Blocked user attempted login: {user['username']}")
                     return jsonify({"success": False, "message": "Your account has been suspended. Contact admin."}), 403
                 
                 print(f"DEBUG: User logged in: {user['username']} ({user.get('role')})")
@@ -524,10 +540,9 @@ def post_ride():
         # Strict Eligibility Check: Must have the "user+driver" role
         user = users_col.find_one({"_id": ObjectId(user_id)})
         
-        # Part 4.5: Role-Based Access + Banned check
-        if user.get("isBanned"):
-            print(f"[RIDE BLOCKED] Banned user: {user_id}")
-            return jsonify({"success": False, "message": "Your account is restricted from posting rides."}), 403
+        # Part 4.5: Global Ban Check
+        if check_if_banned(user_id):
+            return jsonify({"success": False, "message": "You are banned from using this platform"}), 403
 
         role = user.get("role", "user")
         if role != "driver":
@@ -924,6 +939,9 @@ def book_ride_rest(ride_id=None):
     if not user_id or not ride_id:
         return jsonify({"success": False, "message": "auth and rideId required"}), 401
     
+    if check_if_banned(user_id):
+        return jsonify({"success": False, "message": "You are banned from using this platform"}), 403
+    
     try:
         ride = rides_col.find_one({"_id": ObjectId(ride_id)})
         if not ride:
@@ -942,8 +960,6 @@ def book_ride_rest(ride_id=None):
              return jsonify({"success": False, "message": "No seats available"}), 400
              
         user = users_col.find_one({"_id": ObjectId(user_id)})
-        if user.get('isBanned'):
-            return jsonify({"success": False, "message": "Account restricted"}), 403
             
         # Add passenger with both IDs for backward compatibility and decrement capacity
         new_passenger = {
@@ -994,6 +1010,9 @@ def join_ride():
         data = request.get_json() or {}
         ride_id = data.get("rideId")
         user_id = data.get("userId")
+
+        if check_if_banned(user_id):
+            return jsonify({"success": False, "message": "You are banned from using this platform"}), 403
 
         ride = rides_col.find_one({"_id": ObjectId(ride_id)})
 
@@ -1156,6 +1175,8 @@ def _normalize_ride(doc, role, current_date_str):
 
 @app.route("/api/my-rides/<user_id>", methods=["GET", "OPTIONS"])
 def get_my_rides_v2(user_id):
+    if check_if_banned(user_id):
+        return jsonify({"success": False, "message": "You are banned from using this platform"}), 403
     try:
         current_date_str = datetime.now().strftime('%Y-%m-%d')
         
@@ -1211,6 +1232,9 @@ def cancel_ride_passenger():
         
         if not ride_id or not user_id:
             return jsonify({"success": False, "message": "Missing rideId or userId"}), 400
+            
+        if check_if_banned(user_id):
+            return jsonify({"success": False, "message": "You are banned from using this platform"}), 403
             
         ride = rides_col.find_one({"_id": ObjectId(ride_id)})
         if not ride:
@@ -1271,6 +1295,9 @@ def cancel_ride_driver():
     ride_id = data.get('rideId')
     user_id = data.get('userId') # driver id
     
+    if check_if_banned(user_id):
+        return jsonify({"success": False, "message": "You are banned from using this platform"}), 403
+    
     if not ride_id:
         return jsonify({"success": False, "message": "Missing rideId"}), 400
         
@@ -1326,6 +1353,9 @@ def cancel_ride(ride_id):
         
         if not user_id:
             return jsonify({"success": False, "message": "Missing userId"}), 400
+            
+        if check_if_banned(user_id):
+            return jsonify({"success": False, "message": "You are banned from using this platform"}), 403
             
         ride = rides_col.find_one({"_id": ObjectId(ride_id)})
         if not ride:
@@ -2311,6 +2341,32 @@ def admin_report_action():
         else:
             return jsonify({"success": False, "message": "Invalid action"}), 400
             
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route("/api/admin/ban-user", methods=["POST", "OPTIONS"])
+def admin_ban_user():
+    """Directly ban a user."""
+    data = safe_json()
+    user_id = data.get('userId')
+    
+    if not user_id:
+        return jsonify({"success": False, "message": "Missing userId"}), 400
+        
+    try:
+        result = users_col.update_one(
+            {"_id": ObjectId(user_id)},
+            {"$set": {"isBanned": True}}
+        )
+        
+        if result.modified_count > 0:
+            return jsonify({"success": True, "message": "User banned successfully"}), 200
+        else:
+            # Check if already banned
+            user = users_col.find_one({"_id": ObjectId(user_id)})
+            if user and user.get("isBanned"):
+                return jsonify({"success": True, "message": "User is already banned"}), 200
+            return jsonify({"success": False, "message": "User not found or update failed"}), 404
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
 

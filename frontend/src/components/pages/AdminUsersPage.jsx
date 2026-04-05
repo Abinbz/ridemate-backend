@@ -133,16 +133,31 @@ const AdminUsersPage = () => {
                                         <option value="admin">🛡️ Admin</option>
                                     </select>
 
-                                    <button 
-                                        onClick={() => handleUpdateStatus(user.id, { isBanned: !user.isBanned, banReason: user.isBanned ? "" : "Policy Violation" })}
-                                        className={`flex-1 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${
-                                            user.isBanned 
-                                            ? 'bg-emerald-50 text-emerald-600 border border-emerald-100 hover:bg-emerald-100' 
-                                            : 'bg-red-50 text-red-600 border border-red-100 hover:bg-red-100'
-                                        }`}
-                                    >
-                                        {user.isBanned ? '✅ UNBAN' : '🚫 BAN'}
-                                    </button>
+                                    {user.isBanned ? (
+                                        <button 
+                                            onClick={() => handleUpdateStatus(user.id, { isBanned: false })}
+                                            className="flex-1 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest bg-emerald-50 text-emerald-600 border border-emerald-100 hover:bg-emerald-100 transition-all active:scale-95"
+                                        >
+                                            ✅ UNBAN
+                                        </button>
+                                    ) : (
+                                        <button 
+                                            onClick={async () => {
+                                                const res = await fetch(`${API_BASE_URL}/api/admin/ban-user`, {
+                                                    method: 'POST',
+                                                    headers: { 'Content-Type': 'application/json' },
+                                                    body: JSON.stringify({ userId: user.id })
+                                                });
+                                                const data = await res.json();
+                                                if (data.success) {
+                                                    fetchUsers();
+                                                }
+                                            }}
+                                            className="flex-1 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest bg-red-50 text-red-600 border border-red-100 hover:bg-red-100 transition-all active:scale-95"
+                                        >
+                                            🚫 BAN
+                                        </button>
+                                    )}
                                 </div>
 
                                 {user.isBanned && (

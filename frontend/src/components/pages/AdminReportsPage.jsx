@@ -34,21 +34,41 @@ function AdminReportsPage() {
     }
   };
 
-  const handleAction = async (reportId, action) => {
+  const handleAction = async (reportId, action, userId = null) => {
     try {
-      const url = `${API_BASE_URL}/api/admin/report-action`;
-      console.log("API CALL:", url, 'POST', { reportId, action });
+      let url, body;
+      
+      if (action === 'ban' && userId) {
+        url = `${API_BASE_URL}/api/admin/ban-user`;
+        body = JSON.stringify({ userId });
+      } else {
+        url = `${API_BASE_URL}/api/admin/report-action`;
+        body = JSON.stringify({ reportId, action });
+      }
+
+      console.log("API CALL:", url, 'POST', body);
       const res = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
-        body: JSON.stringify({ reportId, action })
+        body
       });
+      
       const data = await res.json();
       if (data.success) {
-        showToast(data.message, 'success');
+        showToast(action === 'ban' ? 'User banned successfully' : data.message, 'success');
+        
+        // If we just banned someone from a report, we still want to resolve the report status
+        if (action === 'ban') {
+           await fetch(`${API_BASE_URL}/api/admin/report-action`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ reportId, action: 'resolve' })
+           });
+        }
+        
         fetchReports(); // Refresh list
       } else {
         showToast(data.message || 'Action failed', 'error');
@@ -134,7 +154,7 @@ function AdminReportsPage() {
 
                 <div className="flex flex-row md:flex-col gap-2">
                   <button 
-                    onClick={() => handleAction(report.id, 'ban')}
+                    onClick={() => handleAction(report.id, 'ban', report.reportedId)}
                     className="flex-1 md:flex-none px-6 py-3 bg-red-500 text-white text-[9px] font-black uppercase tracking-widest rounded-2xl hover:scale-105 active:scale-95 transition-all shadow-lg shadow-red-500/20"
                   >
                     Ban Subject
