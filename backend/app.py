@@ -625,7 +625,10 @@ def search_rides():
 
     try:
         # Initial extraction of all possible rides
-        query = {"status": "upcoming"}
+        query = {
+            "status": "upcoming",
+            "capacity": {"$gt": 0} # Must have available seats
+        }
         # Only add date to query if it's actually provided and not empty
         if data.get('date'):
             query["date"] = data.get('date')
@@ -646,11 +649,6 @@ def search_rides():
             # Exclude if user is already in passengers array (status is booked or joined)
             passengers = ride.get('passengers', [])
             if user_id and any(str(p.get('user')) == str(user_id) for p in passengers):
-                continue
-
-            # Exclude if ride is full based on capacity vs passengers count
-            capacity = int(ride.get('capacity', 1))
-            if len(passengers) >= capacity:
                 continue
             
             # Normalize fields for frontend compatibility
@@ -987,18 +985,21 @@ def book_ride_rest(ride_id=None):
         if user.get('isBanned'):
             return jsonify({"success": False, "message": "Account restricted"}), 403
             
-        # Add passenger with explicit status
+        # Add passenger and decrement available capacity atomically
         new_passenger = {
             "user": user_id,
             "name": user.get('name') or user.get('username'),
             "collegeId": user.get('collegeId', 'N/A'),
-            "status": "booked", # Explicit status tracking
+            "status": "booked",
             "joined": False
         }
         
         rides_col.update_one(
             {"_id": ObjectId(ride_id)},
-            {"$push": {"passengers": new_passenger}}
+            {
+                "$push": {"passengers": new_passenger},
+                "$inc": {"capacity": -1} # Atomically consume a seat
+            }
         )
         
         # Notify driver
@@ -1246,14 +1247,16 @@ def cancel_ride_passenger():
         user = users_col.find_one({"_id": ObjectId(user_id)})
         user_name = user.get('name') or user.get('username', 'A User')
         
-        # 3. Pull user from booked lists
+        # 3. Pull user from passengers list and increment available capacity
         result = rides_col.update_one(
             {"_id": ObjectId(ride_id)},
             {
                 "$pull": {
-                    "bookedUsers": user_id,
-                    "passengerDetails": {"userId": user_id}
-                }
+                    "passengers": {"user": user_id},
+                    "bookedUsers": user_id, # Cleanup legacy if present
+                    "passengerDetails": {"userId": user_id} # Cleanup legacy if present
+                },
+                "$inc": {"capacity": 1} # Atomic seat restoration
             }
         )
         
@@ -1298,27 +1301,29 @@ def cancel_ride_driver():
         if user_id and str(ride.get('createdBy')) != str(user_id):
              return jsonify({"success": False, "message": "Unauthorized"}), 403
              
-        booked_users = ride.get('bookedUsers', [])
+        # 2. Notify all booked passengers from the manifest
+        all_participants = ride.get('passengers', [])
         route_str = f"{ride.get('from')} → {ride.get('to')}"
         
-        # 2. Notify all booked passengers
-        for passenger_id in booked_users:
-            notifications_col.insert_one({
-                "userId": passenger_id,
-                "fromId": user_id or str(ride.get('createdBy', '')),
-                "type": "cancel",
-                "title": "Ride Cancelled",
-                "message": f"Your ride ({route_str}) was cancelled by the driver",
-                "isRead": False,
-                "createdAt": datetime.now()
-            })
-            send_push_notification(passenger_id, "Ride Cancelled", f"Your ride ({route_str}) was cancelled by the driver", {"type": "cancel"})
+        for participant in all_participants:
+            pid = participant.get('user')
+            if pid:
+                create_notification(
+                    user_id=pid,
+                    title="Ride Cancelled",
+                    message=f"Your ride ({route_str}) was cancelled by the driver",
+                    notify_type="cancel",
+                    data={"rideId": str(ride_id)}
+                )
             
-        # 3. Delete ride from DB
-        rides_col.delete_one({"_id": ObjectId(ride_id)})
+        # 3. Mark ride as cancelled instead of deleting
+        rides_col.update_one(
+            {"_id": ObjectId(ride_id)},
+            {"$set": {"status": "cancelled"}}
+        )
         
-        print(f"Driver cancelled and deleted ride {ride_id}")
-        return jsonify({"success": True, "message": "Ride cancelled and deleted successfully"}), 200
+        print(f"Driver marked ride {ride_id} as cancelled")
+        return jsonify({"success": True, "message": "Ride cancelled successfully"}), 200
         
     except Exception as e:
         print(f"Cancel Driver Error: {e}")
@@ -1326,13 +1331,27 @@ def cancel_ride_driver():
 
 @app.route("/api/cancel-ride/<ride_id>", methods=["DELETE", "OPTIONS"])
 def cancel_ride(ride_id):
+    """Generic cancellation (primarily for drivers)."""
+    if request.method == "OPTIONS":
+        return handle_options(f"cancel-ride/{ride_id}")
     try:
-        rides_collection.update_one(
+        ride = rides_col.find_one({"_id": ObjectId(ride_id)})
+        if not ride:
+            return jsonify({"success": False, "message": "Ride not found"}), 404
+            
+        # Only upcoming rides can be cancelled via this generic route
+        if ride.get('status') not in ['upcoming', 'accepted']:
+            return jsonify({"success": False, "message": "Only upcoming rides can be cancelled"}), 400
+            
+        # Optimization: Usually called by driver. 
+        # In a real production app, we'd verify JWT token here.
+        rides_col.update_one(
             {"_id": ObjectId(ride_id)},
             {"$set": {"status": "cancelled"}}
         )
-        return jsonify({"success": True}), 200
+        return jsonify({"success": True, "message": "Ride cancelled successfully"}), 200
     except Exception as e:
+        print(f"Generic Cancel Error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 
