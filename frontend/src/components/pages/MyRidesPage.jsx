@@ -99,7 +99,7 @@ function MyRidesPage() {
 
       if (response.ok && data.success) {
         setRides({
-          posted: data.posted || { upcoming: [], ongoing: [], completed: [] },
+          posted: data.posted || [],
           booked: data.booked || []
         });
       }
@@ -143,8 +143,7 @@ function MyRidesPage() {
 
   const totalRidesInTab = () => {
     const tabData = rides[activeTab];
-    if (activeTab === 'booked') return tabData.length || 0;
-    return (tabData.upcoming?.length || 0) + (tabData.ongoing?.length || 0) + (tabData.completed?.length || 0);
+    return tabData.length || 0;
   };
 
   return (
@@ -191,9 +190,9 @@ function MyRidesPage() {
                 {activeTab === 'posted' ? 'Offer a Ride' : 'Find a Ride'}
               </button>
             </div>
-          ) : activeTab === 'booked' ? (
+          ) : (
             <div className="space-y-4">
-              {rides.booked.map((ride) => (
+              {rides[activeTab].map((ride) => (
                 <RideCard
                   key={ride.id || ride._id}
                   ride={ride}
@@ -203,36 +202,6 @@ function MyRidesPage() {
                 />
               ))}
             </div>
-          ) : (
-            sections.map((section, sIndex) => {
-              const sectionRides = getRidesForSection(section);
-              if (sectionRides.length === 0) return null;
-
-              return (
-                <div
-                  key={section}
-                  className="animate-in fade-in slide-in-from-bottom-2"
-                  style={{ animationDelay: `${sIndex * 100}ms` }}
-                >
-                  <h2 className="text-[11px] font-black text-black uppercase tracking-[0.1em] mb-5 flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 bg-black rounded-full shadow-[0_0_8px_rgba(0,0,0,0.1)]"></span>
-                    {section}
-                  </h2>
-
-                  <div className="space-y-4">
-                    {sectionRides.map((ride) => (
-                      <RideCard
-                        key={ride.id || ride._id}
-                        ride={ride}
-                        activeTab={activeTab}
-                        onJoin={handleJoinRide}
-                        onClick={() => navigate('/user/my-rides/details', { state: { ride } })}
-                      />
-                    ))}
-                  </div>
-                </div>
-              );
-            })
           )}
         </div>
       )}

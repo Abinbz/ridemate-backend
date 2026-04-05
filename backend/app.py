@@ -1157,34 +1157,42 @@ def _normalize_ride(doc, role, current_date_str):
 def get_my_rides_v2(user_id):
     try:
         current_date_str = datetime.now().strftime('%Y-%m-%d')
-
-        posted = {"upcoming": [], "ongoing": [], "completed": []}
-        booked = {"upcoming": [], "ongoing": [], "completed": []}
-
-        # Posted: driverId match or createdBy match
-        for doc in rides_col.find({"$or": [{"driverId": user_id}, {"createdBy": user_id}]}):
-            ride = _normalize_ride(doc, "Driver", current_date_str)
-            key = ride["status"].lower()
-            if key in posted: posted[key].append(ride)
-
-        # Booked: Specific userId match for stabilization
-        booked_cursor = rides_col.find({
-            "passengers.userId": user_id
-        })
         
-        booked = []
+        # 1. Fetch posted rides
+        posted_cursor = rides_col.find({
+            "$or": [{"driverId": user_id}, {"createdBy": user_id}]
+        })
+        posted_rides = []
+        for doc in posted_cursor:
+            ride = _normalize_ride(doc, "Driver", current_date_str)
+            posted_rides.append(ride)
+            
+        # 2. Fetch booked rides
+        booked_cursor = rides_col.find({
+            "passengers": {
+                "$elemMatch": {
+                    "userId": user_id
+                }
+            }
+        })
+        booked_rides = []
         for doc in booked_cursor:
             ride = _normalize_ride(doc, "Passenger", current_date_str)
-            booked.append(ride)
-
-        total = sum(len(v) for v in posted.values()) + sum(len(v) for v in booked.values())
-        print(f"My Rides for {user_id}: {total} total")
-
-        return jsonify({"success": True, "posted": posted, "booked": booked}), 200
+            booked_rides.append(ride)
+            
+        print(f"My Rides for {user_id}: {len(posted_rides)} posted, {len(booked_rides)} booked")
+        return jsonify({
+            "success": True,
+            "posted": posted_rides,
+            "booked": booked_rides
+        }), 200
 
     except Exception as e:
-        print(f"Get My Rides Error: {e}")
-        return jsonify({"success": False, "message": "Database error"}), 500
+        print("MY RIDES ERROR:", str(e))
+        return jsonify({
+            "success": False,
+            "message": str(e)
+        }), 500
 
 
 # --- Cancellation Routes ---
