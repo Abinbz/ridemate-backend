@@ -37,6 +37,13 @@ function MyRideDetailsPage() {
   const [reportReason, setReportReason] = useState('Late pickup');
   const [reportDetails, setReportDetails] = useState('');
   const [reporting, setReporting] = useState(false);
+  
+  const [showReviewModal, setShowReviewModal] = useState(false);
+  const [reviewTargetId, setReviewTargetId] = useState(null);
+  const [reviewTargetName, setReviewTargetName] = useState('');
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewComment, setReviewComment] = useState('');
+  const [submittingReview, setSubmittingReview] = useState(false);
 
   const currentUserId = localStorage.getItem('userId');
   const isDriver = ride ? (ride.driverId || ride.createdBy) === currentUserId : false;
@@ -110,40 +117,47 @@ function MyRideDetailsPage() {
     }
   };
 
-  const handleRate = async (toUserId, isPassenger) => {
-    if (ratingVal === 0) {
+  const handleOpenReview = (userId, name) => {
+    setReviewTargetId(userId);
+    setReviewTargetName(name);
+    setReviewRating(5);
+    setReviewComment('');
+    setShowReviewModal(true);
+  };
+  
+  const submitReview = async () => {
+    if (reviewRating === 0) {
       showToast("Please select a rating!", "error");
       return;
     }
-    setSubmittingRating(true);
+    setSubmittingReview(true);
     try {
       const fromUser = localStorage.getItem('userId');
-      console.log("API CALL:", `${API_BASE_URL}/api/add-rating`);
-      const response = await fetch(`${API_BASE_URL}/api/add-rating`, {
+      console.log("API CALL:", `${API_BASE_URL}/api/submit-review`);
+      const response = await fetch(`${API_BASE_URL}/api/submit-review`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           fromUser,
-          toUser: toUserId,
-          rideId: ride.id,
-          rating: ratingVal,
-          comment
+          toUser: reviewTargetId,
+          rideId: ride.id || ride._id,
+          rating: reviewRating,
+          comment: reviewComment
         })
       });
       const data = await response.json();
       if (response.ok && data.success) {
-        showToast("Thanks for your feedback", "success");
-        setRatedUserIds(prev => [...prev, toUserId]);
-        setRatingVal(0);
-        setComment('');
+        showToast(`Your review for ${reviewTargetName} has been submitted!`, "success");
+        setRatedUserIds(prev => [...prev, reviewTargetId]);
+        setShowReviewModal(false);
       } else {
-        showToast(data.message || 'Failed to submit rating', "error");
+        showToast(data.message || 'Failed to submit review', "error");
       }
     } catch (err) {
       console.error(err);
       showToast(`Server error: ${err.message || 'Check connection'}`, "error");
     } finally {
-      setSubmittingRating(false);
+      setSubmittingReview(false);
     }
   };
 
@@ -368,44 +382,23 @@ function MyRideDetailsPage() {
                   </div>
                 </div>
 
-                {ride.status === 'Completed' && ride.role === 'Driver' && !ratedUserIds.includes(passenger.id) && (
-                  <div className="mt-4 pt-4 border-t border-gray-50 bg-amber-50/30 p-4 rounded-2xl animate-in slide-in-from-top-2 duration-300">
-                    <h4 className="text-[9px] font-black text-black uppercase tracking-widest mb-3 flex items-center gap-2">
-                       <span className="w-1.5 h-1.5 bg-amber-400 rounded-full animate-pulse"></span>
-                       Rate {passenger.name}
-                    </h4>
-                    <div className="flex gap-2 mb-4">
-                      {[1, 2, 3, 4, 5].map((star) => (
-                        <button key={star} onClick={() => setRatingVal(star)} className="transform active:scale-90 transition-transform">
-                          <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 ${ratingVal >= star ? 'text-amber-400' : 'text-gray-200'} transition-colors`} fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M12 .587l3.668 7.568 8.332 1.151-6.064 5.828 1.48 8.279-7.416-3.967-7.417 3.967 1.481-8.279-6.064-5.828 8.332-1.151z" />
-                          </svg>
-                        </button>
-                      ))}
-                    </div>
-                    <input
-                      type="text"
-                      value={comment}
-                      onChange={(e) => setComment(e.target.value)}
-                      placeholder="Optional comment..."
-                      className="w-full px-4 py-3 bg-white border border-gray-100 rounded-xl text-[10px] font-bold focus:outline-none focus:border-black mb-4 placeholder:text-gray-200"
-                    />
+                {ride.status?.toLowerCase() === 'completed' && ride.role === 'Driver' && !ratedUserIds.includes(passenger.id) && (
+                  <div className="mt-4 pt-4 border-t border-gray-50 flex justify-end">
                     <button
-                      onClick={() => handleRate(passenger.id, true)}
-                      disabled={submittingRating || ratingVal === 0}
-                      className="w-full bg-black text-white px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-gray-900 transition-all disabled:opacity-50 active:scale-95 shadow-lg shadow-black/10"
+                      onClick={() => handleOpenReview(passenger.id, passenger.name)}
+                      className="text-[10px] font-black text-amber-500 uppercase tracking-widest border border-amber-100 bg-amber-50/50 px-6 py-2.5 rounded-xl hover:bg-amber-500 hover:text-white transition-all active:scale-95 shadow-sm shadow-amber-200/20"
                     >
-                      {submittingRating ? 'Saving...' : 'Submit Rating'}
+                      ⭐ Rate Passenger
                     </button>
                   </div>
                 )}
                 {ratedUserIds.includes(passenger.id) && (
-                   <div className="mt-4 pt-4 border-t border-gray-50 text-center">
-                     <p className="text-[10px] font-black text-green-500 uppercase tracking-widest flex items-center justify-center gap-1">
-                       <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
-                         <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                       </svg>
-                       Rating Submitted
+                   <div className="mt-4 pt-4 border-t border-gray-50">
+                     <p className="text-[9px] font-black text-emerald-500 uppercase tracking-widest flex items-center gap-1.5 px-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                        </svg>
+                        Review Submitted
                      </p>
                    </div>
                 )}
@@ -527,43 +520,15 @@ function MyRideDetailsPage() {
               )}
             </div>
 
-            {ride.status === 'completed' && !ratedUserIds.includes(ride.driverId || ride.createdBy) && (
-              <div className="bg-amber-50/30 p-8 rounded-[2.5rem] mt-4 animate-in slide-in-from-top-2 duration-400">
-                <h3 className="text-[11px] font-black text-black uppercase tracking-[0.2em] mb-6 flex items-center gap-3">
-                   <div className="w-1.5 h-1.5 bg-amber-400 rounded-full animate-pulse"></div>
-                   Rate your Driver
-                </h3>
-                <div className="flex gap-3 mb-8">
-                  {[1, 2, 3, 4, 5].map((star) => (
-                    <button key={star} onClick={() => setRatingVal(star)} className="transform active:scale-90 transition-transform">
-                      <svg xmlns="http://www.w3.org/2000/svg" className={`h-8 w-8 ${ratingVal >= star ? 'text-amber-400' : 'text-gray-200'} transition-colors`} fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M12 .587l3.668 7.568 8.332 1.151-6.064 5.828 1.48 8.279-7.416-3.967-7.417 3.967 1.481-8.279-6.064-5.828 8.332-1.151z" />
-                      </svg>
-                    </button>
-                  ))}
-                </div>
-                <input
-                  type="text"
-                  value={comment}
-                  onChange={(e) => setComment(e.target.value)}
-                  placeholder="Optional feedback for driver..."
-                  className="w-full px-5 py-4 bg-white border border-gray-100 rounded-2xl text-[11px] font-bold focus:outline-none focus:border-black transition-all mb-6 placeholder:text-gray-200"
-                />
-                <button
-                  onClick={() => handleRate(ride.driverId || ride.createdBy, false)}
-                  disabled={submittingRating || ratingVal === 0}
-                  className="w-full bg-black text-white py-4 rounded-2xl font-black uppercase tracking-widest text-[11px] hover:bg-gray-900 transition-all disabled:opacity-50 active:scale-95 shadow-xl shadow-black/10"
-                >
-                  {submittingRating ? 'Submitting...' : 'Submit Driver Rating'}
-                </button>
-              </div>
-            )}
-            {ratedUserIds.includes(ride.driverId || ride.createdBy) && (
-               <div className="bg-green-50/50 p-6 rounded-[2rem] mt-4 flex items-center justify-center gap-2 border border-green-100">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-green-500" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                  </svg>
-                  <span className="text-[10px] font-black text-green-600 uppercase tracking-widest">Driver Rated Successfully</span>
+            {/* ── Feedback Status (If already rated) ── */}
+            {ride.status?.toLowerCase() === 'completed' && ratedUserIds.includes(ride.driverId || ride.createdBy) && (
+               <div className="bg-emerald-50/30 p-6 rounded-[2.5rem] mt-4 border border-emerald-100 flex items-center justify-center gap-3">
+                  <div className="w-6 h-6 bg-emerald-500 text-white rounded-full flex items-center justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Feedback Provided</span>
                </div>
             )}
           </div>
@@ -589,16 +554,103 @@ function MyRideDetailsPage() {
             </button>
           )}
 
-          <button
-            onClick={handleCancelRide}
-            disabled={cancelling || ride.status === 'completed'}
-            className="w-full bg-white border-2 border-black text-black py-5 rounded-[2rem] text-[10px] font-black uppercase tracking-[0.2em] hover:bg-gray-50 active:scale-[0.98] transition-all disabled:opacity-30 disabled:grayscale"
-          >
-            {cancelling ? 'Processing...' : ride.status === 'completed' ? 'Ride Finished' : 'Cancel Ride'}
-          </button>
+          {/* ── Driver Finishing / Cancellation ── */}
+          {ride.status !== 'completed' && (
+            <button
+              onClick={handleCancelRide}
+              disabled={cancelling}
+              className="w-full bg-white border-2 border-black text-black py-5 rounded-[2rem] text-[10px] font-black uppercase tracking-[0.2em] hover:bg-gray-50 active:scale-[0.98] transition-all disabled:opacity-30 disabled:grayscale"
+            >
+              {cancelling ? 'Processing...' : 'Cancel Ride'}
+            </button>
+          )}
+
+          {/* ── Passenger Rating Action (Primary) ── */}
+          {ride.status?.toLowerCase() === 'completed' && ride.role === 'Passenger' && !ratedUserIds.includes(ride.driverId || ride.createdBy) && (
+            <button
+              onClick={() => handleOpenReview(ride.driverId || ride.createdBy, typeof ride.driver === "object" ? ride.driver?.name : (ride.driver || "Driver"))}
+              className="w-full bg-black text-white py-5 rounded-[2rem] text-[10px] font-black uppercase tracking-[0.2em] shadow-lg shadow-black/10 hover:opacity-90 active:scale-[0.98] transition-all flex items-center justify-center gap-3"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-amber-400" viewBox="0 0 20 20" fill="currentColor">
+                <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+              </svg>
+              Rate Your Ride
+            </button>
+          )}
         </div>
 
       </div>
+
+      {/* ── Review Modal ── */}
+      {showReviewModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 animate-in fade-in duration-300">
+           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => !submittingReview && setShowReviewModal(false)}></div>
+           <div className="bg-white w-full max-w-sm rounded-[3rem] p-10 space-y-8 relative overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300">
+              <header className="space-y-1">
+                 <h3 className="text-sm font-black text-black uppercase tracking-widest">Rate Experience</h3>
+                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest italic">{reviewTargetName}</p>
+              </header>
+
+              <div className="space-y-8">
+                 <div className="flex flex-col items-center gap-4 py-4">
+                    <div className="flex gap-2">
+                       {[1, 2, 3, 4, 5].map((star) => (
+                          <button
+                             key={star}
+                             onClick={() => setReviewRating(star)}
+                             className="transform active:scale-90 transition-transform p-1"
+                          >
+                             <svg 
+                                xmlns="http://www.w3.org/2000/svg" 
+                                className={`h-10 w-10 ${reviewRating >= star ? 'text-amber-400' : 'text-gray-100'} transition-colors drop-shadow-sm`} 
+                                fill="currentColor" 
+                                viewBox="0 0 24 24"
+                             >
+                                <path d="M12 .587l3.668 7.568 8.332 1.151-6.064 5.828 1.48 8.279-7.416-3.967-7.417 3.967 1.481-8.279-6.064-5.828 8.332-1.151z" />
+                             </svg>
+                          </button>
+                       ))}
+                    </div>
+                    <span className="text-[11px] font-black text-black uppercase tracking-[0.2em]">
+                       {reviewRating === 5 ? 'Excellent' : 
+                        reviewRating === 4 ? 'Very Good' : 
+                        reviewRating === 3 ? 'Good experience' : 
+                        reviewRating === 2 ? 'Needs improvement' : 
+                        reviewRating === 1 ? 'Poor Experience' : 'Select Rating'}
+                    </span>
+                 </div>
+
+                 <div className="space-y-4">
+                    <label className="text-[10px] font-black text-gray-300 uppercase tracking-widest px-1">Describe Experience</label>
+                    <textarea 
+                       rows="4" 
+                       value={reviewComment}
+                       onChange={(e) => setReviewComment(e.target.value)}
+                       placeholder="What was great? Any suggestions for improvement?"
+                       className="w-full bg-gray-50 border border-transparent rounded-2xl p-5 text-[11px] font-bold focus:outline-none focus:bg-white focus:border-black transition-all resize-none placeholder:text-gray-200"
+                    />
+                 </div>
+              </div>
+
+              <div className="flex flex-col gap-3">
+                 <button
+                    onClick={submitReview}
+                    disabled={submittingReview || reviewRating === 0}
+                    className="w-full py-5 bg-black text-white text-[11px] font-black uppercase tracking-[0.3em] rounded-2xl hover:bg-gray-800 active:scale-95 transition-all shadow-xl shadow-black/10 disabled:opacity-20"
+                 >
+                    {submittingReview ? 'Submitting...' : 'Post Review'}
+                 </button>
+                 <button
+                    onClick={() => setShowReviewModal(false)}
+                    disabled={submittingReview}
+                    className="w-full py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest hover:text-black transition-colors"
+                 >
+                    Cancel
+                 </button>
+              </div>
+           </div>
+        </div>
+      )}
 
       {/* ── Report Modal ── */}
       {showReportModal && (

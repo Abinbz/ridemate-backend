@@ -1622,6 +1622,7 @@ def get_unread_count(user_id):
 
 # --- Ratings Routes ---
 @app.route("/api/add-rating", methods=["POST", "OPTIONS"])
+@app.route("/api/submit-review", methods=["POST", "OPTIONS"])
 def add_review():
     """Consolidated rating & review endpoint with atomic stats updates."""
     data = safe_json()
