@@ -88,6 +88,9 @@ function PostPage() {
             
             if (data.success) {
                 setUserData(data.user);
+                // Sync localStorage
+                if (data.user.role) localStorage.setItem('role', data.user.role);
+                if (data.user.isDriver !== undefined) localStorage.setItem('isDriver', data.user.isDriver ? 'true' : 'false');
                 
                 // Standardized Role-Based Access
                 const isDriver = data.user.role === "driver";

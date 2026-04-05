@@ -2259,7 +2259,13 @@ def admin_approve_verification(user_id):
         })
         send_push_notification(user_id, "Documents Verified", "Your identity documents have been approved.", {"type": "verification"})
         
-        return jsonify({"success": True, "message": "Verification approved"}), 200
+        updated_user = users_col.find_one({"_id": ObjectId(user_id)})
+        return jsonify({
+            "success": True, 
+            "message": "User verification finalized and roles synced.",
+            "user": parse_json(updated_user)
+        }), 200
+
     except Exception as e:
         print(f"Admin Approve Error: {e}")
         return jsonify({"success": False, "message": "Database error"}), 500

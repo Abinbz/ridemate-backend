@@ -90,8 +90,8 @@ function RideDetailsPage() {
   };
 
   const handleMessage = () => {
-    const driverId = ride.driverId || ride.createdBy;
-    const driverName = typeof ride.driver === 'object' ? ride.driver?.name : ride.driver;
+    const driverId = ride.createdBy || ride.driverId;
+    const driverName = (typeof ride.driver === 'object' && ride.driver) ? ride.driver.name : (typeof ride.driver === 'string' ? ride.driver : "strategic_driver");
 
     if (!driverId) {
       showToast('Contact info not available.', 'error');
@@ -106,9 +106,10 @@ function RideDetailsPage() {
   };
 
   const isJoined = Array.isArray(ride.passengers) ? ride.passengers.some(p => p.user === userId) : false;
-  const isDriver = (ride.driverId || ride.createdBy) === userId;
+  const isDriver = (ride.createdBy || ride.driverId) === userId;
   const isBanned = userData?.isBanned;
-  const canJoin = (ride.status === 'available' || ride.status === 'accepted') && !isJoined && !isDriver && !isBanned;
+  const rideStatus = ride.status?.toLowerCase();
+  const canJoin = (rideStatus === 'available' || rideStatus === 'accepted' || rideStatus === 'upcoming') && !isJoined && !isDriver && !isBanned;
 
   return (
     <div className="min-h-screen bg-white pb-32">
@@ -122,7 +123,7 @@ function RideDetailsPage() {
         <div className="flex flex-col">
           <h1 className="text-sm font-black text-black uppercase tracking-widest leading-none">Ride Details</h1>
           <span className="text-[8px] font-black uppercase text-amber-500 tracking-widest mt-0.5">
-            {ride?.status?.toString() || "accepted"}
+            {ride?.status?.toString().toUpperCase() || "UPCOMING"}
           </span>
         </div>
       </div>
@@ -286,11 +287,11 @@ function RideDetailsPage() {
         </button>
         <button
           onClick={handleJoinRide}
-          disabled={isBooking || !canJoin || isBanned}
+          disabled={isBooking || isBanned || isJoined || isDriver || (rideStatus !== 'upcoming' && rideStatus !== 'available' && rideStatus !== 'accepted')}
           className={`flex-[1.5] py-5 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest active:scale-[0.98] transition-all
-            ${isBooking || !canJoin || isBanned ? 'bg-gray-300 cursor-not-allowed' : 'bg-black hover:bg-gray-900'}`}
+            ${isBooking || isBanned || isJoined || isDriver || (rideStatus !== 'upcoming' && rideStatus !== 'available' && rideStatus !== 'accepted') ? 'bg-gray-300 cursor-not-allowed' : 'bg-black hover:bg-gray-900'}`}
         >
-          {isBooking ? 'Joining...' : isBanned ? 'Account Restricted' : isJoined ? 'Joined' : isDriver ? 'Your Ride' : canJoin ? 'Join Ride' : 'Closed'}
+          {isBooking ? 'Joining...' : isBanned ? 'Restricted' : isJoined ? 'Joined' : isDriver ? 'Your Ride' : (rideStatus === 'upcoming' || rideStatus === 'available' || rideStatus === 'accepted') ? 'Join Ride' : 'Ride Closed'}
         </button>
       </div>
     </div>
