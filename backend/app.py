@@ -2279,29 +2279,6 @@ def report_user():
         print(f"Report User Error: {e}")
         return jsonify({"success": False, "message": "Database error"}), 500
 
-@app.route("/api/admin/reports", methods=["GET", "OPTIONS"])
-def admin_get_reports():
-    if request.method == "OPTIONS":
-        return handle_options("admin/reports")
-    try:
-        cursor = reports_col.find({"status": "pending"}).sort("createdAt", -1)
-        reports = []
-        for doc in cursor:
-            r = parse_json(doc)
-            r["id"] = r.pop("_id", None)
-            
-            # Enrich with names
-            reporter = users_col.find_one({"_id": ObjectId(r["reporterId"])})
-            reported = users_col.find_one({"_id": ObjectId(r["reportedId"])})
-            
-            r["reporterName"] = reporter.get("username") if reporter else "Unknown"
-            r["reportedName"] = reported.get("username") if reported else "Unknown"
-            
-            reports.append(r)
-            
-        return jsonify({"success": True, "reports": reports}), 200
-    except Exception as e:
-        return jsonify({"success": False, "message": str(e)}), 500
 
 @app.route("/api/admin/report-action", methods=["POST", "OPTIONS"])
 def admin_report_action():
@@ -2447,43 +2424,6 @@ def get_ride_details(ride_id):
         print(f"Get Ride Details Error: {e}")
         return jsonify({"success": False, "message": str(e)}), 500
 
-@app.route("/api/admin/verifications", methods=["GET", "OPTIONS"])
-def admin_get_verifications():
-    try:
-        # Join verifications with user names
-        # Aggregating KYC documents from users collection
-        pipeline = [
-            { "$match": { "documents": { "$exists": True } } },
-            {
-                "$project": {
-                    "_id": 0,
-                    "userId": { "$toString": "$_id" },
-                    "userName": "$name",
-                    "userEmail": "$email",
-                    "licenseUrl": "$documents.license.url",
-                    "rcUrl": "$documents.rc.url",
-                    "insuranceUrl": "$documents.insurance.url",
-                    "status": {
-                        "$cond": {
-                            "if": { "$eq": ["$documents.license.status", "approved"] },
-                            "then": "approved",
-                            "else": {
-                                "$cond": {
-                                    "if": { "$eq": ["$documents.license.status", "rejected"] },
-                                    "then": "rejected",
-                                    "else": "pending"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        ]
-        results = list(users_col.aggregate(pipeline))
-        return jsonify({"success": True, "verifications": parse_json(results)}), 200
-    except Exception as e:
-        print(f"Admin Get Verifications Error: {e}")
-        return jsonify({"success": False, "message": "Database error"}), 500
 
 @app.route("/api/admin/verify/<user_id>", methods=["POST", "OPTIONS"])
 def admin_approve_verification(user_id):
