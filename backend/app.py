@@ -1313,31 +1313,97 @@ def cancel_ride_driver():
         print(f"Cancel Driver Error: {e}")
         return jsonify({"success": False, "message": "Database error"}), 500
 
-@app.route("/api/cancel-ride/<ride_id>", methods=["DELETE", "OPTIONS"])
+@app.route("/api/cancel-ride/<ride_id>", methods=["POST", "OPTIONS"])
 def cancel_ride(ride_id):
-    """Generic cancellation (primarily for drivers)."""
+    """Consolidated cancellation logic for both drivers and passengers."""
     if request.method == "OPTIONS":
         return handle_options(f"cancel-ride/{ride_id}")
+        
     try:
+        data = request.get_json() or {}
+        user_id = data.get('userId')
+        
+        if not user_id:
+            return jsonify({"success": False, "message": "Missing userId"}), 400
+            
         ride = rides_col.find_one({"_id": ObjectId(ride_id)})
         if not ride:
             return jsonify({"success": False, "message": "Ride not found"}), 404
             
-        # Only upcoming rides can be cancelled via this generic route
-        if ride.get('status') not in ['upcoming']:
-            return jsonify({"success": False, "message": "Only upcoming rides can be cancelled"}), 400
+        if ride.get('status') == 'completed':
+             return jsonify({"success": False, "message": "Cannot cancel a completed ride"}), 400
+
+        # --- CASE 1: CALLER IS DRIVER (CANCEL ENTIRE TRIP) ---
+        if str(ride.get('createdBy') or ride.get('driverId')) == str(user_id):
+            print(f"[CANCEL] Driver {user_id} cancelling entire ride {ride_id}")
             
-        # Optimization: Usually called by driver. 
-        # In a real production app, we'd verify JWT token here.
-        rides_col.update_one(
+            # Notify all passengers
+            all_participants = ride.get('passengers', [])
+            route_str = f"{(ride.get('fromLocation') or ride.get('from'))} → {(ride.get('toLocation') or ride.get('to'))}"
+            
+            for participant in all_participants:
+                pid = participant.get('userId') or participant.get('user')
+                if pid and str(pid) != str(user_id):
+                    create_notification(
+                        user_id=str(pid),
+                        title="Ride Cancelled",
+                        message=f"Your ride ({route_str}) was cancelled by the driver",
+                        notify_type="cancel",
+                        data={"rideId": str(ride_id)}
+                    )
+            
+            # Atomic update status
+            rides_col.update_one(
+                {"_id": ObjectId(ride_id)},
+                {"$set": {"status": "cancelled", "updatedAt": datetime.now()}}
+            )
+            
+            return jsonify({"success": True, "message": "Ride and all bookings cancelled"}), 200
+
+        # --- CASE 2: CALLER IS PASSENGER (REMOVE ONE SEAT) ---
+        passengers = ride.get('passengers', [])
+        is_passenger = any(str(p.get('userId') or p.get('user')) == str(user_id) for p in passengers)
+        
+        if not is_passenger:
+             return jsonify({"success": False, "message": "User not part of this ride"}), 400
+
+        # Atomic pull and seat restoration
+        result = rides_col.update_one(
             {"_id": ObjectId(ride_id)},
-            {"$set": {"status": "cancelled"}}
+            {
+                "$pull": {
+                    "passengers": {
+                        "$or": [
+                            {"userId": user_id},
+                            {"user": user_id}
+                        ]
+                    }
+                },
+                "$inc": {"capacity": 1},
+                "$set": {"updatedAt": datetime.now()}
+            }
         )
-        print(f"[CANCEL] Ride {ride_id} cancelled via generic DELETE route")
-        return jsonify({"success": True, "message": "Ride cancelled successfully"}), 200
+        
+        if result.modified_count > 0:
+            # Notify driver
+            driver_id = ride.get('driverId') or ride.get('createdBy')
+            route_str = f"{(ride.get('fromLocation') or ride.get('from'))} → {(ride.get('toLocation') or ride.get('to'))}"
+            if driver_id:
+                create_notification(
+                    user_id=str(driver_id),
+                    title="Booking Cancelled",
+                    message=f"A passenger cancelled their booking for {route_str}",
+                    notify_type="cancel",
+                    data={"rideId": str(ride_id)}
+                )
+            
+            return jsonify({"success": True, "message": "Booking removed. Seat restored."}), 200
+        else:
+            return jsonify({"success": False, "message": "Cancellation failed"}), 500
+            
     except Exception as e:
         print(f"Generic Cancel Error: {e}")
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({"success": False, "message": "Database error"}), 500
 
 
 # Backward-compatible alias for the old POST route
