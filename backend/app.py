@@ -1063,285 +1063,57 @@ def start_ride():
         return jsonify({"success": False, "message": str(e)}), 500
 
 @app.route("/api/finish-ride", methods=["POST", "PUT", "OPTIONS"])
-def finish_ride_legacy():
-    # Logic similar to REST finish but handles legacy payloads
+@app.route("/api/rides/<ride_id>/finish", methods=["PUT", "OPTIONS"])
+def finish_ride(ride_id=None):
+    """Consolidated endpoint to complete a ride."""
+    if request.method == "OPTIONS":
+        return handle_options(f"rides/{ride_id}/finish")
+        
     data = safe_json()
-    ride_id = data.get('rideId') or data.get('id')
+    ride_id = ride_id or data.get('rideId') or data.get('id')
     user_id = data.get('userId')
+    
+    if not user_id:
+        # Fallback for auth headers
+        auth_header = request.headers.get("Authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            user_id = auth_header.split(" ")[1]
+
+    if not ride_id or not user_id:
+        return jsonify({"success": False, "message": "Missing rideId or userId"}), 400
     
     try:
         ride = rides_col.find_one({"_id": ObjectId(ride_id)})
         if not ride: return jsonify({"success": False, "message": "Ride not found"}), 404
         
+        # Authorization check
+        driver_id = str(ride.get('driverId') or ride.get('createdBy'))
+        if driver_id != str(user_id):
+             return jsonify({"success": False, "message": "Only the driver can finish the ride"}), 403
+
         rides_col.update_one({"_id": ObjectId(ride_id)}, {"$set": {"status": "completed"}})
         
         # Notify driver
         create_notification(user_id=user_id, title="Trip Completed", message="Well done! You've successfully finished the ride.", notify_type="RIDE_COMPLETED")
         
         # Notify passengers
-        for p in ride.get('passengers', []):
-            create_notification(user_id=p['user'], title="Trip Completed", message="You've reached your destination. Please rate the ride!", notify_type="RIDE_COMPLETED")
+        passengers = ride.get('passengers', [])
+        # Legacy fallback if passengers is empty
+        if not passengers:
+            booked_users = ride.get('bookedUsers', [])
+            for pid in booked_users:
+                create_notification(user_id=pid, title="Trip Completed", message="You've reached your destination. Please rate the ride!", notify_type="RIDE_COMPLETED")
+        else:
+            for p in passengers:
+                create_notification(user_id=p['user'], title="Trip Completed", message="You've reached your destination. Please rate the ride!", notify_type="RIDE_COMPLETED")
             
         return jsonify({"success": True, "message": "Ride completed"}), 200
-    except Exception as e:
-        return jsonify({"success": False, "message": str(e)}), 500
-    user_id = data.get('userId')
-
-    if not ride_id or not user_id:
-        return jsonify({"success": False, "message": "Missing rideId or userId"}), 400
-
-    try:
-        ride = rides_col.find_one({"_id": ObjectId(ride_id)})
-        if not ride:
-            return jsonify({"success": False, "message": "Ride not found"}), 404
-
-        if ride.get('status') != 'Scheduled':
-             return jsonify({"success": False, "message": "Ride is no longer open for joining"}), 400
-
-        booked_users = ride.get('bookedUsers', [])
-        if user_id in booked_users:
-            return jsonify({"success": False, "message": "Already joined this ride"}), 409
-
-        user = users_col.find_one({"_id": ObjectId(user_id)})
-        if not user:
-            return jsonify({"success": False, "message": "User not found"}), 404
-
-        # Part 4.5: Security - Block Banned Users from booking
-        if user.get("isBanned"):
-            print(f"[BOOKING BLOCKED] Banned user: {user_id}")
-            return jsonify({
-                "success": False, 
-                "message": "Your account is restricted from joining rides."
-            }), 403
-
-        passenger_detail = {
-            "userId": user_id,
-            "name": user.get('name') or user.get('username', 'Unknown'),
-            "collegeId" : user.get('collegeId', 'N/A'),
-            "rating": user.get('rating', 0),
-            "avatar": (user.get('name') or user.get('username', 'U'))[0].upper(),
-            "joined": False
-        }
-
-        rides_col.update_one(
-            {"_id": ObjectId(ride_id)},
-            {
-                "$addToSet": {"bookedUsers": user_id},
-                "$push": {"passengerDetails": passenger_detail, "passengers": passenger_detail}
-            }
-        )
-
-        # 1. Notify driver about new booking (PASSENGER_JOINED)
-        driver_id = ride.get('driverId') or ride.get('createdBy')
-        p_name = user.get('name') or user.get('username', 'Someone')
-        p_rating = user.get('rating', 0)
-        route_str = f"{ride.get('from') or ride.get('fromLocation', '')} → {ride.get('to') or ride.get('toLocation', '')}"
-        
-        if driver_id:
-            create_notification(
-                user_id=driver_id,
-                title="New Booking",
-                message=f"{p_name} (⭐{p_rating}) joined your ride ({route_str})",
-                notify_type="PASSENGER_JOINED",
-                data={"rideId": ride_id, "passengerId": user_id}
-            )
-            send_push_notification(driver_id, "New Booking", f"{p_name} (⭐{p_rating}) joined your ride ({route_str})", {"type": "booking"})
-
-        # 2. Notify passenger that their booking is confirmed (RIDE_ACCEPTED)
-        create_notification(
-            user_id=user_id,
-            title="Booking Confirmed",
-            message=f"You have joined the ride: {route_str}. Trip is confirmed!",
-            notify_type="RIDE_ACCEPTED",
-            data={"rideId": ride_id}
-        )
-        send_push_notification(user_id, "Booking Confirmed", f"You have joined the ride: {route_str}", {"type": "booking"})
-
-        return jsonify({"success": True, "message": "Ride joined successfully"}), 200
-    except Exception as e:
-        print(f"Join Ride Error: {e}")
-        return jsonify({"success": False, "message": "Database error"}), 500
-
-@app.route("/api/start-ride", methods=["POST", "OPTIONS"])
-def start_ride():
-    data = safe_json()
-    ride_id = data.get('rideId')
-    user_id = data.get('userId')
-
-    try:
-        ride = rides_col.find_one({"_id": ObjectId(ride_id)})
-        if not ride: return jsonify({"success": False, "message": "Ride not found"}), 404
-        
-        if str(ride.get('driverId') or ride.get('createdBy')) != str(user_id):
-            return jsonify({"success": False, "message": "Only the driver can start the ride"}), 403
-
-        if ride.get('status') != 'accepted':
-            return jsonify({"success": False, "message": "Only 'accepted' rides can be started"}), 400
-            
-        rides_col.update_one({"_id": ObjectId(ride_id)}, {"$set": {"status": "ongoing"}})
-        
-        # Notify passengers that ride has started using standardized service
-        route_str = f"{ride.get('from') or ride.get('fromLocation', '')} → {ride.get('to') or ride.get('toLocation', '')}"
-        for pid in ride.get('bookedUsers', []):
-            create_notification(
-                user_id=pid,
-                title="Ride Started",
-                message=f"Your ride ({route_str}) has started. Have a safe trip!",
-                notify_type="RIDE_STARTED",
-                data={"rideId": ride_id}
-            )
-            send_push_notification(pid, "Ride Started", f"Your ride ({route_str}) has started. Have a safe trip!", {"type": "ride_update"})
-        
-        return jsonify({"success": True, "message": "Ride started"}), 200
-    except Exception as e:
-        return jsonify({"success": False, "message": str(e)}), 500
-
-@app.route("/api/end-ride", methods=["POST", "OPTIONS"])
-def end_ride():
-    data = safe_json()
-    ride_id = data.get('rideId')
-    user_id = data.get('userId')
-
-    try:
-        ride = rides_col.find_one({"_id": ObjectId(ride_id)})
-        if not ride: return jsonify({"success": False, "message": "Ride not found"}), 404
-
-        if str(ride.get('driverId') or ride.get('createdBy')) != str(user_id):
-            return jsonify({"success": False, "message": "Only the driver can end the ride"}), 403
-
-        if ride.get('status') != 'ongoing':
-            return jsonify({"success": False, "message": "Only 'ongoing' rides can be ended"}), 400
-
-        rides_col.update_one({"_id": ObjectId(ride_id)}, {"$set": {"status": "completed"}})
-        
-        # Notify driver + passengers that ride has ended
-        route_str = f"{ride.get('from') or ride.get('fromLocation', '')} → {ride.get('to') or ride.get('toLocation', '')}"
-        
-        # 1. Notify passengers (RIDE_COMPLETED)
-        for pid in ride.get('bookedUsers', []):
-            create_notification(
-                user_id=pid,
-                title="Ride Completed",
-                message=f"Your ride ({route_str}) is complete. Don't forget to rate your driver!",
-                notify_type="RIDE_COMPLETED",
-                data={"rideId": ride_id}
-            )
-            send_push_notification(pid, "Ride Completed", f"Your ride ({route_str}) is complete. Don't forget to rate your driver!", {"type": "ride_update"})
-            
-        # 2. Notify driver (RIDE_COMPLETED)
-        create_notification(
-            user_id=user_id,
-            title="Ride Summary",
-            message=f"You have successfully completed the ride ({route_str}). Well done!",
-            notify_type="RIDE_COMPLETED",
-            data={"rideId": ride_id}
-        )
-        
         return jsonify({"success": True, "message": "Ride completed"}), 200
     except Exception as e:
+        print(f"Finish Ride Error: {e}")
         return jsonify({"success": False, "message": str(e)}), 500
 
-@app.route("/api/rides/<ride_id>/finish", methods=["PUT", "OPTIONS"])
-def finish_ride_rest(ride_id):
-    """RESTful PUT endpoint to complete a ride."""
-    if request.method == "OPTIONS":
-        return handle_options(f"rides/{ride_id}/finish")
-    
-    try:
-        ride = rides_col.find_one({"_id": ObjectId(ride_id)})
-        if not ride:
-            return jsonify({"success": False, "msg": "Ride not found"}), 404
-            
-        # Get userId from body or Authorization header (for compatibility)
-        data = safe_json()
-        user_id = data.get('userId')
-        if not user_id:
-            auth_header = request.headers.get("Authorization")
-            if auth_header and auth_header.startswith("Bearer "):
-                user_id = auth_header.split(" ")[1]
-        
-        if not user_id or user_id in ["null", "undefined"]:
-            return jsonify({"success": False, "msg": "Not authorized - Missing user identity"}), 401
-
-        # Authorization: Check if user is the driver
-        driver_id = str(ride.get('driverId') or ride.get('createdBy'))
-        if driver_id != str(user_id):
-            return jsonify({"success": False, "msg": "Not authorized"}), 403
-
-        # State machine check: Must be ongoing
-        if ride.get('status') != 'ongoing':
-            return jsonify({"success": False, "msg": "Ride is not ongoing"}), 400
-
-        # Update status to completed
-        rides_col.update_one({"_id": ObjectId(ride_id)}, {"$set": {"status": "completed"}})
-        
-        # Notify driver + passengers (using standardized service)
-        route_str = f"{ride.get('from') or ride.get('fromLocation', '')} → {ride.get('to') or ride.get('toLocation', '')}"
-        
-        # 1. Notify passengers (RIDE_COMPLETED)
-        for pid in ride.get('bookedUsers', []):
-            create_notification(
-                user_id=pid,
-                title="Ride Completed",
-                message=f"Your ride ({route_str}) is complete. Don't forget to rate your driver!",
-                notify_type="RIDE_COMPLETED",
-                data={"rideId": ride_id}
-            )
-            send_push_notification(pid, "Ride Completed", f"Your ride ({route_str}) is complete. Don't forget to rate your driver!", {"type": "ride_update"})
-            
-        # 2. Notify driver (RIDE_COMPLETED)
-        create_notification(
-            user_id=user_id,
-            title="Ride Summary",
-            message=f"You have successfully completed the ride ({route_str}). Well done!",
-            notify_type="RIDE_COMPLETED",
-            data={"rideId": ride_id}
-        )
-        
-        print(f"Ride Finished via REST API: {ride_id}")
-        return jsonify({"success": True, "ride": parse_json(ride)}), 200
-        
-    except Exception as e:
-        print(f"Finish Ride API Error for {ride_id}: {e}")
-        return jsonify({"success": False, "msg": str(e)}), 500
-
-
-@app.route("/api/book-ride", methods=["POST", "OPTIONS"])
-def book_ride():
-    return join_ride()
-
-@app.route("/api/ride/<ride_id>/join-participation", methods=["PUT", "OPTIONS"])
-def join_participation(ride_id):
-    data = safe_json()
-    user_id = data.get('userId')
-    
-    if not ride_id or not user_id:
-        return jsonify({"success": False, "message": "Missing rideId or userId"}), 400
-        
-    try:
-        ride = rides_col.find_one({"_id": ObjectId(ride_id)})
-        if not ride:
-            return jsonify({"success": False, "message": "Ride not found"}), 404
-            
-        if ride.get('status') != 'ongoing':
-            return jsonify({"success": False, "message": "Ride is not currently ongoing"}), 400
-            
-        # Update specific passenger's joined status
-        # Note: We update both 'passengers' and 'passengerDetails' for redundancy/compatibility
-        rides_col.update_one(
-            {"_id": ObjectId(ride_id), "passengers.userId": user_id},
-            {"$set": {"passengers.$.joined": True}}
-        )
-        rides_col.update_one(
-            {"_id": ObjectId(ride_id), "passengerDetails.userId": user_id},
-            {"$set": {"passengerDetails.$.joined": True}}
-        )
-        
-        return jsonify({"success": True, "message": "Successfully joined the ongoing ride"}), 200
-    except Exception as e:
-        print(f"Participation Error: {e}")
-        return jsonify({"success": False, "message": "Database error"}), 500
-
+# --- User Social & Profile Helpers ---
 
 def _normalize_ride(doc, role, current_date_str):
     """Helper to normalize a single ride document for frontend consumption."""
