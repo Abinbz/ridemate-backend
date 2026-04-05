@@ -196,13 +196,36 @@ function ProfilePage() {
           {userData.username?.[0] || 'U'}
         </div>
         <h1 className="text-2xl font-black text-black leading-none mb-2">{userData.username}</h1>
-        <div className="flex items-center gap-2 mb-2">
+        <div className="flex items-center gap-2 mb-6">
           <p className="text-[10px] font-bold text-gray-300 uppercase tracking-widest">ID: {userData.collegeId}</p>
           {userData.isVerified ? (
-            <span className="bg-emerald-50 text-emerald-500 text-[8px] font-black uppercase px-2 py-0.5 rounded-full">Verified</span>
+            <span className="bg-emerald-50 text-emerald-500 text-[8px] font-black uppercase px-2 py-0.5 rounded-full">Verified Profile</span>
           ) : (
             <span className="bg-amber-50 text-amber-500 text-[8px] font-black uppercase px-2 py-0.5 rounded-full">KYC Pending</span>
           )}
+          {userData.isBanned && (
+             <span className="bg-red-50 text-red-500 text-[8px] font-black uppercase px-2 py-0.5 rounded-full">Account Suspended</span>
+          )}
+        </div>
+
+        {/* --- Reputation Stats Grid --- */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 w-full max-w-lg mt-4">
+          <div className="bg-gray-50/50 p-4 rounded-3xl border border-gray-100 flex flex-col items-center justify-center">
+            <span className="text-xl font-black text-black mb-1 italic">⭐ {userData.avgRating || '5.0'}</span>
+            <p className="text-[7px] font-black text-gray-400 uppercase tracking-tighter">Avg Rating</p>
+          </div>
+          <div className="bg-gray-50/50 p-4 rounded-3xl border border-gray-100 flex flex-col items-center justify-center">
+            <span className="text-xl font-black text-black mb-1 italic">{userData.reviewsReceived?.length || 0}</span>
+            <p className="text-[7px] font-black text-gray-400 uppercase tracking-tighter">Feedback</p>
+          </div>
+          <div className="bg-gray-50/50 p-4 rounded-3xl border border-gray-100 flex flex-col items-center justify-center">
+            <span className="text-xl font-black text-black mb-1 italic">{userData.reviewsGiven?.length || 0}</span>
+            <p className="text-[7px] font-black text-gray-400 uppercase tracking-tighter">Reviews Given</p>
+          </div>
+          <div className="bg-gray-50/50 p-4 rounded-3xl border border-gray-100 flex flex-col items-center justify-center">
+            <span className="text-xl font-black text-red-500 mb-1 italic">{userData.reportsReceived?.length || 0}</span>
+            <p className="text-[7px] font-black text-gray-400 uppercase tracking-tighter">Safety Alerts</p>
+          </div>
         </div>
       </div>
 

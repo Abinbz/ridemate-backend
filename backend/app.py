@@ -129,6 +129,7 @@ try:
     reports_col = db["reports"]
     messages_col = db["messages"]
     ratings_col = db["ratings"]
+    reviews_col = db["reviews"]
     notifications_col = db["notifications"]
     verifications_col = db["verifications"]
     admins_col = db["admins"]  # Initialize admins collection
@@ -356,10 +357,10 @@ def login():
             provided_pass = data.get('password', '')
 
             if check_password_hash(stored_hash, provided_pass):
-                # Check if user is blocked
-                if user.get('isBlocked', False):
-                    print(f"DEBUG: Blocked user attempted login: {user['username']}")
-                    return jsonify({"success": False, "message": "Your account has been blocked. Contact admin."}), 403
+                # Check if user is blocked or banned
+                if user.get('isBlocked', False) or user.get('isBanned', False):
+                    print(f"DEBUG: Blocked/Banned user attempted login: {user['username']}")
+                    return jsonify({"success": False, "message": "Your account has been suspended. Contact admin."}), 403
                 
                 print(f"DEBUG: User logged in: {user['username']} ({user.get('role')})")
                 return jsonify({
@@ -1621,7 +1622,8 @@ def get_unread_count(user_id):
 
 # --- Ratings Routes ---
 @app.route("/api/add-rating", methods=["POST", "OPTIONS"])
-def add_rating():
+def add_review():
+    """Consolidated rating & review endpoint with atomic stats updates."""
     data = safe_json()
     from_user = data.get('fromUser') or data.get('raterId')
     to_user = data.get('toUser') or data.get('ratedUserId')
@@ -1633,91 +1635,115 @@ def add_rating():
         return jsonify({"success": False, "message": "Missing required fields"}), 400
         
     try:
-        # Part 1 & 9: Ride Status Check
+        # Pre-checks
         ride = rides_col.find_one({"_id": ObjectId(ride_id)})
         if not ride:
             return jsonify({"success": False, "message": "Ride not found"}), 404
         
-        if ride.get('status') != 'Completed':
-            return jsonify({"success": False, "message": "Rating allowed only after ride completion"}), 400
+        if ride.get('status') != 'completed':
+            return jsonify({"success": False, "message": "Rating allowed only after completion"}), 400
 
-        # Part 7: Prevent Duplicate Ratings per Ride
-        existing = ratings_col.find_one({
+        # Prevent duplicates per ride
+        existing = reviews_col.find_one({
             "fromUser": from_user,
             "toUser": to_user,
             "rideId": ride_id
         })
         if existing:
-            return jsonify({"success": False, "message": "You have already rated this user for this ride"}), 409
+            return jsonify({"success": False, "message": "Duplicate review detected"}), 409
 
-        # Part 5: Store in DB
-        rating_doc = {
+        review_doc = {
             "fromUser": from_user,
             "toUser": to_user,
             "rideId": ride_id,
             "rating": float(rating),
             "comment": comment,
-            "timestamp": datetime.now()
+            "createdAt": datetime.now()
         }
-        ratings_col.insert_one(rating_doc)
         
-        # Part 6: Update User Stats
-        all_ratings = list(ratings_col.find({"toUser": to_user}))
-        total_count = len(all_ratings)
-        avg_rating = sum([r['rating'] for r in all_ratings]) / total_count
+        # 1. Insert into reviews collection
+        result = reviews_col.insert_one(review_doc)
+        review_id = str(result.inserted_id)
+
+        # 2. Embed inside ride document
+        rides_col.update_one(
+            {"_id": ObjectId(ride_id)},
+            {"$push": {"reviews": review_doc}}
+        )
+        
+        # 3. Update User Stats & ID Tracking
+        # Fetch all ratings for accurate average
+        all_reviews = list(reviews_col.find({"toUser": to_user}))
+        total_count = len(all_reviews)
+        avg_rating = sum([r['rating'] for r in all_reviews]) / total_count
         
         users_col.update_one(
             {"_id": ObjectId(to_user)},
-            {"$set": {
-                "rating": round(avg_rating, 1),
-                "totalRatings": total_count
-            }}
+            {
+                "$set": {
+                    "avgRating": round(avg_rating, 1),
+                    "totalReviews": total_count
+                },
+                "$push": {"reviewsReceived": review_id}
+            }
+        )
+        
+        # Track given review on the rater's document
+        users_col.update_one(
+            {"_id": ObjectId(from_user)},
+            {"$push": {"reviewsGiven": review_id}}
         )
 
-        # Part 9: Notifications
+        # 4. Standardized Notification
         from_u_doc = users_col.find_one({"_id": ObjectId(from_user)})
         name = from_u_doc.get('name') or from_u_doc.get('username', 'Someone')
         
-        notifications_col.insert_one({
-            "userId": to_user,
-            "fromId": from_user,
-            "type": "rating",
-            "title": "New Rating",
-            "message": f"{name} rated you ⭐ {int(rating)}",
-            "isRead": False,
-            "createdAt": datetime.now()
-        })
-        send_push_notification(to_user, "New Rating", f"{name} rated you ⭐ {int(rating)}", {"type": "rating"})
+        create_notification(
+            user_id=to_user,
+            title="New Review",
+            message=f"{name} rated you ⭐ {int(rating)}: \"{comment[:30]}...\"",
+            notify_type="rating",
+            data={"rideId": ride_id, "rating": rating}
+        )
         
-        return jsonify({"success": True, "message": "Rating submitted successfully"}), 201
+        return jsonify({"success": True, "message": "Review submitted successfully"}), 201
     except Exception as e:
-        print(f"Add Rating Error: {e}")
+        print(f"Add Review Error: {e}")
         return jsonify({"success": False, "message": "Database error"}), 500
 
 @app.route("/api/ratings/<user_id>", methods=["GET", "OPTIONS"])
 def get_user_ratings(user_id):
     try:
-        received_cursor = ratings_col.find({"toUser": user_id}).sort("timestamp", -1)
-        given_cursor = ratings_col.find({"fromUser": user_id}).sort("timestamp", -1)
+        # Fetch from BOTH legacy ratings and new reviews
+        received_ratings = list(ratings_col.find({"toUser": user_id}))
+        received_reviews = list(reviews_col.find({"toUser": user_id}))
         
-        received = []
-        for doc in received_cursor:
-            r = parse_json(doc)
-            r["id"] = r.pop("_id", None)
-            from_u = users_col.find_one({"_id": ObjectId(r["fromUser"])})
-            r["fromUserName"] = from_u.get("username", "Unknown") if from_u else "Unknown"
-            r["fromUserAvatar"] = r["fromUserName"][0].upper()
-            received.append(r)
-            
-        given = []
-        for doc in given_cursor:
-            r = parse_json(doc)
-            r["id"] = r.pop("_id", None)
-            to_u = users_col.find_one({"_id": ObjectId(r["toUser"])})
-            r["toUserName"] = to_u.get("username", "Unknown") if to_u else "Unknown"
-            r["toUserAvatar"] = r["toUserName"][0].upper()
-            given.append(r)
-            
+        given_ratings = list(ratings_col.find({"fromUser": user_id}))
+        given_reviews = list(reviews_col.find({"fromUser": user_id}))
+        
+        def process_docs(docs, user_key):
+            processed = []
+            for doc in docs:
+                r = parse_json(doc)
+                r["id"] = r.pop("_id", None)
+                # Handle both 'timestamp' (legacy) and 'createdAt' (new)
+                r["timestamp"] = r.get("createdAt") or r.get("timestamp")
+                
+                other_u_id = r.get(user_key)
+                if other_u_id:
+                    other_u = users_col.find_one({"_id": ObjectId(other_u_id)})
+                    r[f"{user_key}Name"] = other_u.get("username", "Unknown") if other_u else "Unknown"
+                    r[f"{user_key}Avatar"] = r[f"{user_key}Name"][0].upper()
+                processed.append(r)
+            return processed
+
+        received = process_docs(received_ratings + received_reviews, "fromUser")
+        given = process_docs(given_ratings + given_reviews, "toUser")
+        
+        # Sort by timestamp decending
+        received.sort(key=lambda x: str(x.get('timestamp', '')), reverse=True)
+        given.sort(key=lambda x: str(x.get('timestamp', '')), reverse=True)
+        
         return jsonify({
             "success": True, 
             "received": received,
@@ -2206,6 +2232,15 @@ def report_user():
         return jsonify({"success": False, "message": "Missing required fields"}), 400
         
     try:
+        # Prevent triple reports for same context
+        existing = reports_col.find_one({
+            "reporterId": reporter_id,
+            "reportedId": reported_id,
+            "rideId": ride_id
+        })
+        if existing:
+            return jsonify({"success": False, "message": "Report for this incident already filed"}), 409
+
         report_doc = {
             "reporterId": reporter_id,
             "reportedId": reported_id,
@@ -2215,25 +2250,91 @@ def report_user():
             "status": "pending",
             "createdAt": datetime.now()
         }
-        reports_col.insert_one(report_doc)
+        result = reports_col.insert_one(report_doc)
+        report_id = str(result.inserted_id)
         
+        # Sync User Document Arrays
+        users_col.update_one(
+            {"_id": ObjectId(reporter_id)},
+            {"$push": {"reportsGiven": report_id}}
+        )
+        users_col.update_one(
+            {"_id": ObjectId(reported_id)},
+            {"$push": {"reportsReceived": report_id}}
+        )
+
         # Notify Admin
         admins = list(users_col.find({"role": "admin"}))
         for admin in admins:
-            notifications_col.insert_one({
-                "userId": str(admin["_id"]),
-                "fromId": reporter_id,
-                "type": "admin_alert",
-                "title": "New User Report",
-                "message": f"A user was reported for: {reason}",
-                "isRead": False,
-                "createdAt": datetime.now()
-            })
+            create_notification(
+                user_id=str(admin["_id"]),
+                title="New User Report",
+                message=f"A user was reported for: {reason}",
+                notify_type="admin_alert",
+                data={"reportId": report_id, "reason": reason}
+            )
             
         return jsonify({"success": True, "message": "Report submitted successfully"}), 201
     except Exception as e:
         print(f"Report User Error: {e}")
         return jsonify({"success": False, "message": "Database error"}), 500
+
+@app.route("/api/admin/reports", methods=["GET", "OPTIONS"])
+def admin_get_reports():
+    if request.method == "OPTIONS":
+        return handle_options("admin/reports")
+    try:
+        cursor = reports_col.find({"status": "pending"}).sort("createdAt", -1)
+        reports = []
+        for doc in cursor:
+            r = parse_json(doc)
+            r["id"] = r.pop("_id", None)
+            
+            # Enrich with names
+            reporter = users_col.find_one({"_id": ObjectId(r["reporterId"])})
+            reported = users_col.find_one({"_id": ObjectId(r["reportedId"])})
+            
+            r["reporterName"] = reporter.get("username") if reporter else "Unknown"
+            r["reportedName"] = reported.get("username") if reported else "Unknown"
+            
+            reports.append(r)
+            
+        return jsonify({"success": True, "reports": reports}), 200
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route("/api/admin/report-action", methods=["POST", "OPTIONS"])
+def admin_report_action():
+    if request.method == "OPTIONS":
+        return handle_options("admin/report-action")
+    data = safe_json()
+    report_id = data.get('reportId')
+    action = data.get('action') # 'ban' or 'ignore'
+    
+    if not report_id or not action:
+        return jsonify({"success": False, "message": "Missing fields"}), 400
+        
+    try:
+        report = reports_col.find_one({"_id": ObjectId(report_id)})
+        if not report:
+             return jsonify({"success": False, "message": "Report not found"}), 404
+             
+        if action == 'ban':
+            reported_user_id = report.get('reportedId')
+            users_col.update_one(
+                {"_id": ObjectId(reported_user_id)},
+                {"$set": {"isBanned": True}}
+            )
+            reports_col.update_one({"_id": ObjectId(report_id)}, {"$set": {"status": "resolved"}})
+            return jsonify({"success": True, "message": "User banned and report resolved"}), 200
+        elif action == 'ignore':
+            reports_col.update_one({"_id": ObjectId(report_id)}, {"$set": {"status": "ignored"}})
+            return jsonify({"success": True, "message": "Report ignored"}), 200
+        else:
+            return jsonify({"success": False, "message": "Invalid action"}), 400
+            
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
 
 @app.route("/api/reports/user/<user_id>", methods=["GET", "OPTIONS"])
 def get_user_reports(user_id):

@@ -34,6 +34,30 @@ function AdminReportsPage() {
     }
   };
 
+  const handleAction = async (reportId, action) => {
+    try {
+      const url = `${API_BASE_URL}/api/admin/report-action`;
+      console.log("API CALL:", url, 'POST', { reportId, action });
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({ reportId, action })
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast(data.message, 'success');
+        fetchReports(); // Refresh list
+      } else {
+        showToast(data.message || 'Action failed', 'error');
+      }
+    } catch (err) {
+      showToast('Connection error', 'error');
+    }
+  };
+
   if (loading) {
     return (
       <div className="p-8 flex justify-center">
@@ -46,17 +70,17 @@ function AdminReportsPage() {
     <div className="space-y-8 animate-in fade-in duration-700">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-black text-black tracking-tight">User Reports</h1>
+          <h1 className="text-2xl font-black text-black tracking-tight tracking-tight">User Reports</h1>
           <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">
             Monitor and resolve community concerns
           </p>
         </div>
-        <div className="bg-black text-white px-4 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest">
+        <div className="bg-black text-white px-4 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest leading-none">
           {reports.length} Total Cases
         </div>
       </div>
 
-      <div className="grid gap-6">
+      <div className="grid gap-6 pb-20">
         {reports.length > 0 ? (
           reports.map((report) => (
             <div key={report.id} className="bg-white border border-gray-100 p-8 rounded-[2.5rem] hover:shadow-xl hover:shadow-gray-100 transition-all group">
@@ -66,8 +90,8 @@ function AdminReportsPage() {
                     <span className="px-3 py-1 bg-red-50 text-red-600 text-[8px] font-black uppercase tracking-widest rounded-full border border-red-100">
                       {report.reason}
                     </span>
-                    <span className={`px-3 py-1 text-[8px] font-black uppercase tracking-widest rounded-full border ${
-                      report.status === 'pending' ? 'bg-yellow-50 text-yellow-600 border-yellow-100' : 'bg-green-50 text-green-600 border-green-100'
+                    <span className={`px-3 py-1 text-[8px] font-black uppercase tracking-widest rounded-full border leading-none ${
+                        report.status === 'pending' ? 'bg-amber-50 text-amber-600 border-amber-100' : 'bg-green-50 text-green-600 border-green-100'
                     }`}>
                       {report.status}
                     </span>
@@ -75,25 +99,25 @@ function AdminReportsPage() {
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="p-4 bg-gray-50 rounded-2xl border border-transparent group-hover:border-gray-100 transition-colors">
-                      <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Reporter</p>
+                      <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1 italic">Reporter Info</p>
                       <p className="text-xs font-black text-black">{report.reporterName || 'Unknown'}</p>
-                      <p className="text-[9px] font-bold text-gray-400 truncate">{report.reporterId}</p>
+                      <p className="text-[8px] font-bold text-gray-300 truncate">{report.reporterId}</p>
                     </div>
                     <div className="p-4 bg-gray-50 rounded-2xl border border-transparent group-hover:border-gray-100 transition-colors">
-                      <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Reported User</p>
+                      <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1 italic">Reported Subject</p>
                       <p className="text-xs font-black text-black">{report.reportedName || 'Unknown'}</p>
-                      <p className="text-[9px] font-bold text-gray-400 truncate">{report.reportedId}</p>
+                      <p className="text-[8px] font-bold text-gray-300 truncate">{report.reportedId}</p>
                     </div>
                   </div>
 
-                  <div className="p-6 border border-gray-50 rounded-3xl italic text-xs font-bold text-gray-600 leading-relaxed bg-white">
+                  <div className="p-6 border border-gray-50 rounded-3xl italic text-xs font-bold text-gray-600 leading-relaxed bg-white/50">
                     &quot;{report.details || 'No additional details provided.'}&quot;
                   </div>
 
                   <div className="flex items-center gap-4 text-[9px] font-black text-gray-300 uppercase tracking-widest">
-                    <span>Case ID: {report.id}</span>
+                    <span>CASE: {report.id}</span>
                     <span>•</span>
-                    <span>Date: {new Date(report.createdAt).toLocaleDateString()}</span>
+                    <span>{new Date(report.createdAt).toLocaleDateString()}</span>
                     {report.rideId && (
                       <>
                         <span>•</span>
@@ -101,7 +125,7 @@ function AdminReportsPage() {
                           onClick={() => navigate(`/admin/ride/${report.rideId}`)}
                           className="text-black hover:underline"
                         >
-                          View Ride Context
+                          View Ride Log
                         </button>
                       </>
                     )}
@@ -110,16 +134,16 @@ function AdminReportsPage() {
 
                 <div className="flex flex-row md:flex-col gap-2">
                   <button 
-                    onClick={() => showToast('Action not implemented in demo', 'info')}
-                    className="flex-1 md:flex-none px-6 py-3 bg-black text-white text-[9px] font-black uppercase tracking-widest rounded-2xl hover:scale-105 active:scale-95 transition-all"
+                    onClick={() => handleAction(report.id, 'ban')}
+                    className="flex-1 md:flex-none px-6 py-3 bg-red-500 text-white text-[9px] font-black uppercase tracking-widest rounded-2xl hover:scale-105 active:scale-95 transition-all shadow-lg shadow-red-500/20"
                   >
-                    Take Action
+                    Ban Subject
                   </button>
                   <button 
-                    onClick={() => showToast('Report dismissed', 'success')}
+                    onClick={() => handleAction(report.id, 'ignore')}
                     className="flex-1 md:flex-none px-6 py-3 border border-gray-100 text-gray-400 text-[9px] font-black uppercase tracking-widest rounded-2xl hover:bg-gray-50 transition-all"
                   >
-                    Dismiss
+                    Ignore
                   </button>
                 </div>
               </div>
