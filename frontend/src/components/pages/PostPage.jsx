@@ -217,8 +217,35 @@ function PostPage() {
   const handlePostRide = async (e) => {
     if (e) e.preventDefault();
 
-    if (!formData.startingFrom || !formData.goingTo || !formData.date || !formData.time || !formData.price || !formData.vehicleName) {
-      alert('Please fill in all required fields (Starting From, Going To, Date, Time, Price, Vehicle Name).');
+    // 1. Debug Telemetry: Identify missing fields exactly
+    console.log("Post Ride Attempt - Current Validation State:", {
+      startingFrom: formData.startingFrom,
+      goingTo: formData.goingTo,
+      date: formData.date,
+      time: formData.time,
+      price: formData.price,
+      vehicleName: formData.vehicleName,
+      startCoords,
+      endCoords
+    });
+
+    const isStartingFromFilled = formData.startingFrom && formData.startingFrom.trim() !== '';
+    const isGoingToFilled = formData.goingTo && formData.goingTo.trim() !== '';
+    const isDateFilled = !!formData.date;
+    const isTimeFilled = !!formData.time;
+    const isPriceFilled = formData.price !== "" && formData.price !== null;
+    const isVehicleNameFilled = formData.vehicleName && formData.vehicleName.trim() !== '';
+
+    if (!isStartingFromFilled || !isGoingToFilled || !isDateFilled || !isTimeFilled || !isPriceFilled || !isVehicleNameFilled) {
+      const missing = [];
+      if (!isStartingFromFilled) missing.push("Starting From");
+      if (!isGoingToFilled) missing.push("Going To");
+      if (!isDateFilled) missing.push("Date");
+      if (!isTimeFilled) missing.push("Time");
+      if (!isPriceFilled) missing.push("Price");
+      if (!isVehicleNameFilled) missing.push("Vehicle Name");
+      
+      alert(`Please fill all required fields: ${missing.join(", ")}`);
       return;
     }
 

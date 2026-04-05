@@ -78,9 +78,27 @@ const AdminVerificationPage = () => {
             });
 
             if (response.ok) {
-                // 🔥 Critical: Refetch to stay in sync with database
-                await fetchVerifications();
-                setMessage({ text: `${docType.toUpperCase()} status updated`, type: 'success' });
+                const data = await response.json();
+                if (data.success && data.user) {
+                    // Optimized Local State Update: No full list refresh
+                    setVerifications(prev => prev.map(u => u.userId === userId ? { ...u, documents: data.user.documents } : u));
+                    
+                    // Update the decisions map as well
+                    setDecisions(prev => ({
+                        ...prev,
+                        [userId]: {
+                            ...prev[userId],
+                            documents: {
+                                license: { status: data.user.documents?.license?.status || 'pending', reason: data.user.documents?.license?.reason || '' },
+                                rc: { status: data.user.documents?.rc?.status || 'pending', reason: data.user.documents?.rc?.reason || '' },
+                                insurance: { status: data.user.documents?.insurance?.status || 'pending', reason: data.user.documents?.insurance?.reason || '' }
+                            }
+                        }
+                    }));
+                    setMessage({ text: `${docType.toUpperCase()} status updated`, type: 'success' });
+                }
+            } else {
+                throw new Error("Update failed on server. Code: " + response.status);
             }
         } catch (error) {
             console.error('Status update error:', error);
@@ -160,8 +178,8 @@ const AdminVerificationPage = () => {
 
             if (data.success) {
                 setMessage({ text: 'Decision finalized successfully', type: 'success' });
-                // Synchronization: Refetch the list to ensure all state is current
-                await fetchVerifications();
+                // Synchronization: Remove user from local list manually OR refetch
+                setVerifications(prev => prev.filter(v => v.userId !== userId));
                 setExpandedUser(null);
                 setTimeout(() => setMessage({ text: '', type: '' }), 3000);
             } else {
@@ -301,10 +319,14 @@ const AdminVerificationPage = () => {
                                                                 </span>
                                                             </div>
                                                             <select 
-                                                                value={userDecision.documents[doc.id]?.status || 'approved'}
+                                                                value={userDecision.documents[doc.id]?.status || 'pending'}
                                                                 onChange={(e) => updateStatus(user.userId, doc.id, e.target.value)}
-                                                                className="w-full bg-gray-50 border-none rounded-2xl px-5 py-4 text-[11px] font-bold focus:ring-2 ring-black transition-all appearance-none cursor-pointer"
+                                                                className={`w-full border-none rounded-2xl px-5 py-4 text-[11px] font-bold focus:ring-2 ring-black transition-all appearance-none cursor-pointer ${
+                                                                    userDecision.documents[doc.id]?.status === 'approved' ? 'bg-emerald-50 text-emerald-700' : 
+                                                                    userDecision.documents[doc.id]?.status === 'rejected' ? 'bg-red-50 text-red-700' : 'bg-gray-50'
+                                                                }`}
                                                             >
+                                                                <option value="pending">⏳ Pending Review</option>
                                                                 <option value="approved">✅ Approve Document</option>
                                                                 <option value="rejected">❌ Reject Document</option>
                                                             </select>
