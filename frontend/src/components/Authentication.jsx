@@ -137,6 +137,8 @@ function Authentication() {
           if (data.userId) {
             localStorage.setItem('userId', data.userId);
             localStorage.setItem('username', formData.username);
+            localStorage.setItem('role', data.role || 'user');
+            localStorage.setItem('isDriver', data.isDriver ? 'true' : 'false');
           }
           localStorage.setItem('isAdmin', 'false');
           navigate('/user/home');

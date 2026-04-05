@@ -314,6 +314,7 @@ def signup():
             "password": hashed_password, 
             "role": "user",
             "isVerified": False,
+            "isDriver": False,
             "isBanned": False,
             "banReason": "",
             "rating": 0
@@ -356,7 +357,13 @@ def login():
                     return jsonify({"success": False, "message": "Your account has been blocked. Contact admin."}), 403
                 
                 print(f"DEBUG: User logged in: {user['username']} ({user.get('role')})")
-                return jsonify({"success": True, "message": "Login successful", "userId": str(user["_id"])}), 200
+                return jsonify({
+                    "success": True, 
+                    "message": "Login successful", 
+                    "userId": str(user["_id"]),
+                    "role": user.get("role", "user"),
+                    "isDriver": user.get("isDriver", False)
+                }), 200
             else:
                 print(f"DEBUG: Login failed: Password mismatch for {data['username']}")
                 return jsonify({"success": False, "message": "Invalid username or password"}), 401
@@ -542,7 +549,7 @@ def post_ride():
             "capacity": int(data.get('passengers') or data.get('capacity') or 1),
             "passengerPreference": data.get('passengerPreference', 'Any'),
             "passengers": [], 
-            "status": "available",
+            "status": "upcoming",
             "createdAt": datetime.now(),
             "from": data.get('startingFrom'),
             "to": data.get('goingTo'),
@@ -572,7 +579,7 @@ def post_ride():
                 "capacity": int(data.get('passengers') or data.get('capacity') or 1),
                 "passengerPreference": data.get('passengerPreference', 'Any'),
                 "passengers": [], 
-                "status": "available",
+                "status": "upcoming",
                 "createdAt": datetime.now(),
                 "from": data.get('goingTo'),
                 "to": data.get('startingFrom'),
@@ -604,7 +611,7 @@ def search_rides():
 
     try:
         # Initial extraction of all possible rides
-        query = {"status": "accepted"}
+        query = {"status": "upcoming"}
         # Only add date to query if it's actually provided and not empty
         if data.get('date'):
             query["date"] = data.get('date')
@@ -1128,7 +1135,7 @@ def _normalize_ride(doc, role, current_date_str):
     ride["to"] = to_loc
     
     stored_status = ride.get("status", "accepted")
-    if stored_status in ["Scheduled", "Upcoming", "upcoming", "accepted"]:
+    if stored_status.lower() in ["scheduled", "upcoming", "accepted", "available"]:
         ride["status"] = "accepted"
     else:
         ride["status"] = stored_status.lower() if isinstance(stored_status, str) else stored_status
@@ -1159,8 +1166,8 @@ def get_my_rides_v2(user_id):
             key = ride["status"].lower()
             if key in posted: posted[key].append(ride)
 
-        # Booked: bookedUsers list or passengers[].userId
-        for doc in rides_col.find({"$or": [{"bookedUsers": user_id}, {"passengers.userId": user_id}]}):
+        # Booked: bookedUsers list or passengers[].user
+        for doc in rides_col.find({"$or": [{"bookedUsers": user_id}, {"passengers.user": user_id}]}):
             ride = _normalize_ride(doc, "Passenger", current_date_str)
             key = ride["status"].lower()
             if key in booked: booked[key].append(ride)
@@ -1326,7 +1333,7 @@ def ride_history():
 
         booked_history = []
         for doc in rides_col.find({
-            "$or": [{"bookedUsers": user_id}, {"passengers.userId": user_id}],
+            "$or": [{"bookedUsers": user_id}, {"passengers.user": user_id}],
             "status": "completed"
         }):
             ride = _normalize_ride(doc, "Passenger", current_date_str)
@@ -1708,13 +1715,17 @@ def verify_user_decision(user_id_url=None):
 
         # Part 1: Promote as Driver Logic
         final_role = "user"
+        promote_to_driver = False
+        
         if overall_status == "approved":
             if promote:
                 final_role = "driver"
+                promote_to_driver = True
             else:
                 final_role = "user"
 
         update_data["role"] = final_role
+        update_data["isDriver"] = promote_to_driver
 
         # Update the database
         users_col.update_one(
@@ -1859,6 +1870,11 @@ def update_user_status():
             update_fields["role"] = "driver"
 
         # Part 2: Trigger Status Update
+        if update_fields.get("role") == "driver":
+            update_fields["isDriver"] = True
+        elif update_fields.get("role") == "user":
+            update_fields["isDriver"] = False
+
         users_col.update_one(
             {"_id": ObjectId(user_id)},
             {"$set": update_fields}
