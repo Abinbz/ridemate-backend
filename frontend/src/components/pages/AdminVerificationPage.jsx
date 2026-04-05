@@ -64,21 +64,33 @@ const AdminVerificationPage = () => {
         }
     };
 
-    const updateStatus = (userId, docType, status) => {
-        console.log(`Updating ${docType} status to ${status} for ${userId}`);
-        setDecisions(prev => ({
-            ...prev,
-            [userId]: {
-                ...prev[userId],
-                documents: {
-                    ...prev[userId].documents,
-                    [docType]: { ...prev[userId].documents[docType], status }
-                }
+    const updateStatus = async (userId, docType, status) => {
+        try {
+            console.log(`📡 Updating ${docType} to ${status}...`);
+            const token = localStorage.getItem('token');
+            const response = await fetch(`${API_BASE_URL}/api/admin/verify-document/${userId}`, {
+                method: 'PUT',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ type: docType, status })
+            });
+
+            if (response.ok) {
+                // 🔥 Critical: Refetch to stay in sync with database
+                await fetchVerifications();
+                setMessage({ text: `${docType.toUpperCase()} status updated`, type: 'success' });
             }
-        }));
+        } catch (error) {
+            console.error('Status update error:', error);
+            setMessage({ text: 'Failed to update document status', type: 'error' });
+        }
     };
 
-    const updateReason = (userId, docType, reason) => {
+    const updateReason = async (userId, docType, reason) => {
+        // We can keep reason local until status change or finalize, 
+        // but let's make it persistent if it's rejected
         setDecisions(prev => ({
             ...prev,
             [userId]: {
@@ -148,7 +160,8 @@ const AdminVerificationPage = () => {
 
             if (data.success) {
                 setMessage({ text: 'Decision finalized successfully', type: 'success' });
-                setVerifications(prev => prev.filter(v => v.userId !== userId));
+                // Synchronization: Refetch the list to ensure all state is current
+                await fetchVerifications();
                 setExpandedUser(null);
                 setTimeout(() => setMessage({ text: '', type: '' }), 3000);
             } else {

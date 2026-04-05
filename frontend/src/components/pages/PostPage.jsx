@@ -95,6 +95,7 @@ function PostPage() {
 
                 if (!isDriver || isBanned) {
                     console.log("🔒 Access Blocked: User restricted or unverified.");
+                    // Optional: Navigate to profile or show a barrier
                 }
             }
         } catch (error) {
@@ -104,6 +105,26 @@ function PostPage() {
 
     checkDriverStatus();
   }, [navigate]);
+
+  if (userData && (userData.role !== 'driver' || userData.isBanned)) {
+    return (
+        <div className="flex flex-col items-center justify-center min-h-[80vh] px-6 text-center gap-6 animate-in fade-in duration-700">
+            <div className="w-24 h-24 bg-gray-50 rounded-[2.5rem] flex items-center justify-center text-4xl shadow-sm border border-gray-100">🚫</div>
+            <div className="space-y-2">
+                <h2 className="text-xl font-black text-black uppercase tracking-tighter">Access restricted</h2>
+                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest max-w-[280px] leading-relaxed">
+                    {userData.isBanned ? "Your account is currently restricted for policy violations." : "Profile verification required to offer platform rides."}
+                </p>
+            </div>
+            <button 
+                onClick={() => navigate('/profile')}
+                className="px-10 py-4 bg-black text-white text-[11px] font-black uppercase tracking-[0.2em] rounded-2xl hover:scale-105 transition-transform"
+            >
+                Verify Profile
+            </button>
+        </div>
+    );
+  }
 
   // Trigger route calculation automatically
   useEffect(() => {

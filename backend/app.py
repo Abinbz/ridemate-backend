@@ -539,16 +539,14 @@ def post_ride():
             "vehicleName": data.get('vehicleName', 'Unknown'),
             "vehicleType": data.get('vehicleType', 'Car'),
             "price": data.get('price'),
-            "capacity": data.get('passengers', 1),
+            "capacity": int(data.get('passengers') or data.get('capacity') or 1),
             "passengerPreference": data.get('passengerPreference', 'Any'),
             "passengers": [], 
-            "status": "accepted",
+            "status": "available",
             "createdAt": datetime.now(),
             "from": data.get('startingFrom'),
             "to": data.get('goingTo'),
             "createdBy": data.get('userId') or data.get('createdBy'),
-            "bookedUsers": [],
-            "passengerDetails": [],
             "startLat": data.get('startLat'),
             "startLng": data.get('startLng'),
             "endLat": data.get('endLat'),
@@ -571,16 +569,14 @@ def post_ride():
                 "vehicleName": data.get('vehicleName', 'Unknown'),
                 "vehicleType": data.get('vehicleType', 'Car'),
                 "price": data.get('returnPrice') or data.get('price'),
-                "capacity": data.get('passengers', 1),
+                "capacity": int(data.get('passengers') or data.get('capacity') or 1),
                 "passengerPreference": data.get('passengerPreference', 'Any'),
                 "passengers": [], 
-                "status": "accepted",
+                "status": "available",
                 "createdAt": datetime.now(),
                 "from": data.get('goingTo'),
                 "to": data.get('startingFrom'),
                 "createdBy": data.get('userId') or data.get('createdBy'),
-                "bookedUsers": [],
-                "passengerDetails": [],
                 "startLat": data.get('endLat'),
                 "startLng": data.get('endLng'),
                 "endLat": data.get('startLat'),
@@ -927,12 +923,168 @@ def optimize_rides():
         print(f"GA Pipe Evaluate Error: {e}")
         return jsonify({"success": False, "message": "ML Algorithm mapping fault.", "error": str(e)}), 500
 
-# --- Booking Routes ---
+# --- Booking & Passenger Routes ---
 
-@app.route("/api/join-ride", methods=["POST", "OPTIONS"])
-def join_ride():
+@app.route("/api/rides/<ride_id>/book", methods=["POST", "OPTIONS"])
+def book_ride_rest(ride_id):
+    """Passenger seat reservation."""
+    if request.method == "OPTIONS":
+        return handle_options(f"rides/{ride_id}/book")
+    
+    data = safe_json()
+    user_id = data.get('userId')
+    
+    if not user_id:
+        return jsonify({"success": False, "message": "auth required"}), 401
+    
+    try:
+        ride = rides_col.find_one({"_id": ObjectId(ride_id)})
+        if not ride:
+            return jsonify({"success": False, "message": "Ride not found"}), 404
+        
+        if ride.get('status') != 'available':
+            return jsonify({"success": False, "message": "Ride no longer available"}), 400
+            
+        passengers = ride.get('passengers', [])
+        if any(p['user'] == user_id for p in passengers):
+            return jsonify({"success": False, "message": "Already booked"}), 400
+            
+        if len(passengers) >= ride.get('capacity', 1):
+             return jsonify({"success": False, "message": "Ride is full"}), 400
+             
+        user = users_col.find_one({"_id": ObjectId(user_id)})
+        if user.get('isBanned'):
+            return jsonify({"success": False, "message": "Account restricted"}), 403
+            
+        # Add passenger
+        new_passenger = {
+            "user": user_id,
+            "name": user.get('name') or user.get('username'),
+            "collegeId": user.get('collegeId', 'N/A'),
+            "joined": False
+        }
+        
+        rides_col.update_one(
+            {"_id": ObjectId(ride_id)},
+            {"$push": {"passengers": new_passenger}}
+        )
+        
+        # Notify driver
+        driver_id = ride.get('driverId') or ride.get('createdBy')
+        create_notification(
+            user_id=driver_id,
+            title="New Passenger",
+            message=f"{new_passenger['name']} booked a seat on your ride to {ride.get('toLocation')}.",
+            notify_type="PASSENGER_JOINED",
+            data={"rideId": ride_id}
+        )
+
+        # Notify passenger
+        create_notification(
+            user_id=user_id,
+            title="Booking Confirmed",
+            message=f"Success! Your seat is reserved for the ride to {ride.get('toLocation')}.",
+            notify_type="RIDE_ACCEPTED",
+            data={"rideId": ride_id}
+        )
+        
+        print(f"DEBUG: Ride {ride_id} booked by {user_id}")
+        return jsonify({"success": True, "message": "Booking confirmed"}), 200
+    except Exception as e:
+        print(f"Booking Error: {e}")
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route("/api/rides/<ride_id>/join", methods=["PUT", "OPTIONS"])
+def join_ride_rest(ride_id):
+    """Passenger check-in (physical join)."""
+    if request.method == "OPTIONS":
+        return handle_options(f"rides/{ride_id}/join")
+    
+    data = safe_json()
+    user_id = data.get('userId')
+    
+    try:
+        ride = rides_col.find_one({"_id": ObjectId(ride_id)})
+        if not ride: return jsonify({"success": False, "message": "Ride not found"}), 404
+        
+        if ride.get('status') != 'ongoing':
+            return jsonify({"success": False, "message": "Ride is not ongoing"}), 400
+            
+        # Update specific passenger 'joined' status
+        res = rides_col.update_one(
+            {"_id": ObjectId(ride_id), "passengers.user": user_id},
+            {"$set": {"passengers.$.joined": True}}
+        )
+        
+        if res.modified_count > 0:
+            # Notify driver
+            driver_id = ride.get('driverId') or ride.get('createdBy')
+            create_notification(
+                user_id=driver_id,
+                title="Passenger Joined",
+                message="A passenger has joined the ride and is now with you.",
+                notify_type="PASSENGER_JOINED",
+                data={"rideId": ride_id}
+            )
+            return jsonify({"success": True }), 200
+        
+        return jsonify({"success": False, "message": "Passenger not found or already joined"}), 404
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route("/api/start-ride", methods=["POST", "OPTIONS"])
+def start_ride():
     data = safe_json()
     ride_id = data.get('rideId')
+    user_id = data.get('userId')
+
+    try:
+        ride = rides_col.find_one({"_id": ObjectId(ride_id)})
+        if not ride: return jsonify({"success": False, "message": "Ride not found"}), 404
+        
+        if str(ride.get('driverId') or ride.get('createdBy')) != str(user_id):
+            return jsonify({"success": False, "message": "Only the driver can start the ride"}), 403
+
+        # Update status to ongoing
+        rides_col.update_one({"_id": ObjectId(ride_id)}, {"$set": {"status": "ongoing"}})
+        
+        # Notify all passengers
+        for p in ride.get('passengers', []):
+            create_notification(
+                user_id=p['user'],
+                title="Ride Started",
+                message=f"Your ride to {ride.get('toLocation')} has started. Track it now!",
+                notify_type="RIDE_STARTED",
+                data={"rideId": ride_id}
+            )
+        
+        return jsonify({"success": True, "message": "Ride started"}), 200
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route("/api/finish-ride", methods=["POST", "PUT", "OPTIONS"])
+def finish_ride_legacy():
+    # Logic similar to REST finish but handles legacy payloads
+    data = safe_json()
+    ride_id = data.get('rideId') or data.get('id')
+    user_id = data.get('userId')
+    
+    try:
+        ride = rides_col.find_one({"_id": ObjectId(ride_id)})
+        if not ride: return jsonify({"success": False, "message": "Ride not found"}), 404
+        
+        rides_col.update_one({"_id": ObjectId(ride_id)}, {"$set": {"status": "completed"}})
+        
+        # Notify driver
+        create_notification(user_id=user_id, title="Trip Completed", message="Well done! You've successfully finished the ride.", notify_type="RIDE_COMPLETED")
+        
+        # Notify passengers
+        for p in ride.get('passengers', []):
+            create_notification(user_id=p['user'], title="Trip Completed", message="You've reached your destination. Please rate the ride!", notify_type="RIDE_COMPLETED")
+            
+        return jsonify({"success": True, "message": "Ride completed"}), 200
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
     user_id = data.get('userId')
 
     if not ride_id or not user_id:
@@ -1828,7 +1980,13 @@ def verify_user_decision(user_id_url=None):
                 notify_type="ROLE_UPGRADED"
             )
             
-        return jsonify({"success": True, "message": "Decision finalized"}), 200
+        # Return the updated user object for frontend sync
+        updated_user = users_col.find_one({"_id": ObjectId(user_id)})
+        return jsonify({
+            "success": True, 
+            "message": "Decision finalized",
+            "user": parse_json(updated_user)
+        }), 200
         
     except Exception as e:
         print(f"Admin Verify User Error for {user_id}: {e}")
@@ -1855,7 +2013,13 @@ def verify_document_rest(user_id):
             f"documents.{doc_type}.updatedAt": datetime.now()
         }
         users_col.update_one({"_id": ObjectId(user_id)}, {"$set": update_data})
-        return jsonify({"success": True, "message": f"Document {doc_type} updated"}), 200
+        # Return updated user for frontend sync
+        updated_user = users_col.find_one({"_id": ObjectId(user_id)})
+        return jsonify({
+            "success": True, 
+            "message": f"Document {doc_type} updated",
+            "user": parse_json(updated_user)
+        }), 200
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
 
@@ -1960,8 +2124,14 @@ def update_user_status():
             )
             send_push_notification(user_id, notif["title"], notif["message"], {"type": notif["type"]})
 
+        # Fix: Fetch updated user and return for frontend synchronization
+        updated_user = users_col.find_one({"_id": ObjectId(user_id)})
         print(f"[ADMIN ACTION] User {user_id} updated. Notifications dispatched.")
-        return jsonify({"success": True, "message": "User updated and notified"}), 200
+        return jsonify({
+            "success": True, 
+            "message": "User updated and notified",
+            "user": parse_json(updated_user)
+        }), 200
 
     except Exception as e:
         print("ADMIN UPDATE ERROR:", e)

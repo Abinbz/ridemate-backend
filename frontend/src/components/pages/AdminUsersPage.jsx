@@ -21,12 +21,42 @@ const AdminUsersPage = () => {
             }
         } catch (error) {
             console.error('Error fetching admin users:', error);
-            // Silent error for UI but log it
         } finally {
             setLoading(false);
         }
     };
 
+    const handleUpdateStatus = async (userId, payload) => {
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/admin/update-user-status`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId, ...payload })
+            });
+            const data = await response.json();
+            if (data.success) {
+                // Synchronization: Refetch the list to ensure all state is current
+                await fetchUsers();
+            }
+        } catch (error) {
+            console.error('Update status error:', error);
+        }
+    };
+
+    const filteredUsers = Array.isArray(users) ? users.filter(user => 
+        user.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        user.username?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        user.email?.toLowerCase().includes(searchTerm.toLowerCase())
+    ) : [];
+
+    if (loading) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
+                <div className="w-12 h-12 border-4 border-black border-t-transparent rounded-full animate-spin"></div>
+                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest animate-pulse">Syncing Directory...</p>
+            </div>
+        );
+    }
 
     return (
         <div className="p-6 space-y-6">

@@ -46,50 +46,48 @@ function RideDetailsPage() {
 
   const handleJoinRide = async () => {
     const rideId = ride.id || ride._id;
-    // Part 4.5: Parse user from localStorage as requested
     const storedUser = JSON.parse(localStorage.getItem("user") || "{}");
 
     if (!userId) {
-      showToast('Please log in to join a ride.', 'error');
+      showToast('Please log in to book a ride.', 'error');
       navigate('/');
       return;
     }
 
-    // 🚫 Block banned user logic
     if (userData?.isBanned || storedUser?.isBanned) {
-      showToast('Your account is restricted from joining rides.', 'error');
+      showToast('Your account is restricted from booking.', 'error');
       return;
     }
 
-    if (ride.status !== 'accepted') {
-      showToast('This ride has already started or is completed.', 'error');
+    if (ride.status !== 'available' && ride.status !== 'accepted') {
+      showToast('This ride is no longer available for booking.', 'error');
       return;
     }
 
     setIsBooking(true);
     try {
-      console.log("API CALL:", `${API_BASE_URL}/api/join-ride`);
-      const response = await fetch(`${API_BASE_URL}/api/join-ride`, {
+      const url = `${API_BASE_URL}/api/rides/${rideId}/book`;
+      console.log("API CALL:", url, 'POST');
+      const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rideId, userId })
+        body: JSON.stringify({ userId })
       });
       const data = await response.json();
 
       if (response.ok && data.success) {
-        showToast('Ride joined successfully!', 'success');
+        showToast('Ride booked successfully!', 'success');
         navigate('/user/my-rides');
       } else {
-        showToast(data.message || 'Failed to join ride', 'error');
+        showToast(data.message || 'Failed to book ride', 'error');
       }
     } catch (err) {
-      console.error('Join ride error:', err);
+      console.error('Booking error:', err);
       showToast('Server not reachable. Check backend connection.', 'error');
     } finally {
       setIsBooking(false);
     }
   };
-
 
   const handleMessage = () => {
     const driverId = ride.driverId || ride.createdBy;
@@ -107,10 +105,10 @@ function RideDetailsPage() {
     });
   };
 
-  const isJoined = ride.bookedUsers?.includes(userId);
+  const isJoined = Array.isArray(ride.passengers) ? ride.passengers.some(p => p.user === userId) : false;
   const isDriver = (ride.driverId || ride.createdBy) === userId;
   const isBanned = userData?.isBanned;
-  const canJoin = (ride.status === 'accepted') && !isJoined && !isDriver && !isBanned;
+  const canJoin = (ride.status === 'available' || ride.status === 'accepted') && !isJoined && !isDriver && !isBanned;
 
   return (
     <div className="min-h-screen bg-white pb-32">

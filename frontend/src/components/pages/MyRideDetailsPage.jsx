@@ -169,13 +169,12 @@ function MyRideDetailsPage() {
       const rideId = ride.id || ride._id;
       console.log("Calling finish API:", rideId);
 
-      const response = await fetch(`${API_BASE_URL}/api/rides/${rideId}/finish`, {
-        method: 'PUT',
+      const response = await fetch(`${API_BASE_URL}/api/finish-ride`, {
+        method: 'POST',
         headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${currentUserId}`
+          'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ userId: currentUserId })
+        body: JSON.stringify({ rideId, userId: currentUserId })
       });
 
       const data = await response.json();
@@ -187,7 +186,7 @@ function MyRideDetailsPage() {
         setRide(prev => ({ ...prev, status: 'completed' }));
         await fetchRide();
       } else {
-        throw new Error(data.msg || data.message || "Failed to finish ride");
+        throw new Error(data.message || "Failed to finish ride");
       }
     } catch (err) {
       console.error("Finish error:", err);
@@ -197,8 +196,8 @@ function MyRideDetailsPage() {
 
   const handleJoinParticipation = async () => {
     try {
-      setLoading(true);
-      const response = await fetch(`${API_BASE_URL}/api/ride/${ride.id || ride._id}/join-participation`, {
+      const rideId = ride.id || ride._id;
+      const response = await fetch(`${API_BASE_URL}/api/rides/${rideId}/join`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: currentUserId })
@@ -212,8 +211,6 @@ function MyRideDetailsPage() {
       }
     } catch (err) {
       showToast('Error during check-in', 'error');
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -500,7 +497,7 @@ function MyRideDetailsPage() {
               </div>
 
               {/* Passenger Check-in Action */}
-              {ride.role === 'Passenger' && ride.status === 'ongoing' && !((ride.passengers || []).find(p => p.userId === userId)?.joined) && (
+              {ride.role === 'Passenger' && ride.status === 'ongoing' && !((ride.passengers || []).find(p => p.user === currentUserId)?.joined) && (
                 <button
                   onClick={handleJoinParticipation}
                   className="w-full bg-emerald-500 text-white py-4 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] shadow-lg shadow-emerald-500/20 hover:bg-emerald-600 active:scale-95 transition-all mt-4"
