@@ -166,30 +166,42 @@ function MyRideDetailsPage() {
 
   const handleFinishRide = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/end-ride`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rideId: ride.id || ride._id, userId })
+      const rideId = ride.id || ride._id;
+      console.log("Calling finish API:", rideId);
+
+      const response = await fetch(`${API_BASE_URL}/api/rides/${rideId}/finish`, {
+        method: 'PUT',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${currentUserId}`
+        },
+        body: JSON.stringify({ userId: currentUserId })
       });
+
       const data = await response.json();
+      console.log("Finish response:", data);
+
       if (data.success) {
         showToast('Ride finished successfully!', 'success');
+        // Optimistic UI update
+        setRide(prev => ({ ...prev, status: 'completed' }));
         await fetchRide();
       } else {
-        showToast(data.message || 'Failed to finish ride', 'error');
+        throw new Error(data.msg || data.message || "Failed to finish ride");
       }
     } catch (err) {
-      showToast('Error finishing ride', 'error');
+      console.error("Finish error:", err);
+      showToast(err.message || 'Error finishing ride', 'error');
     }
   };
 
   const handleJoinParticipation = async () => {
     try {
-      setRefreshing(true);
+      setLoading(true);
       const response = await fetch(`${API_BASE_URL}/api/ride/${ride.id || ride._id}/join-participation`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId })
+        body: JSON.stringify({ userId: currentUserId })
       });
       const data = await response.json();
       if (data.success) {
@@ -201,7 +213,7 @@ function MyRideDetailsPage() {
     } catch (err) {
       showToast('Error during check-in', 'error');
     } finally {
-      setRefreshing(false);
+      setLoading(false);
     }
   };
 

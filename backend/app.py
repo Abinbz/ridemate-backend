@@ -1049,6 +1049,62 @@ def end_ride():
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
 
+@app.route("/api/rides/<ride_id>/finish", methods=["PUT", "OPTIONS"])
+def finish_ride_rest(ride_id):
+    """RESTful PUT endpoint to complete a ride."""
+    if request.method == "OPTIONS":
+        return handle_options(f"rides/{ride_id}/finish")
+    
+    try:
+        ride = rides_col.find_one({"_id": ObjectId(ride_id)})
+        if not ride:
+            return jsonify({"success": False, "msg": "Ride not found"}), 404
+            
+        # Get userId from body or Authorization header (for compatibility)
+        data = safe_json()
+        user_id = data.get('userId')
+        if not user_id:
+            auth_header = request.headers.get("Authorization")
+            if auth_header and auth_header.startswith("Bearer "):
+                user_id = auth_header.split(" ")[1]
+        
+        if not user_id or user_id in ["null", "undefined"]:
+            return jsonify({"success": False, "msg": "Not authorized - Missing user identity"}), 401
+
+        # Authorization: Check if user is the driver
+        driver_id = str(ride.get('driverId') or ride.get('createdBy'))
+        if driver_id != str(user_id):
+            return jsonify({"success": False, "msg": "Not authorized"}), 403
+
+        # State machine check: Must be ongoing
+        if ride.get('status') != 'ongoing':
+            return jsonify({"success": False, "msg": "Ride is not ongoing"}), 400
+
+        # Update status to completed
+        rides_col.update_one({"_id": ObjectId(ride_id)}, {"$set": {"status": "completed"}})
+        
+        # Notify passengers (same pattern as end_ride)
+        route_str = f"{ride.get('from') or ride.get('fromLocation', '')} → {ride.get('to') or ride.get('toLocation', '')}"
+        for pid in ride.get('bookedUsers', []):
+            notifications_col.insert_one({
+                "userId": pid,
+                "fromId": user_id,
+                "type": "ride_update",
+                "title": "Ride Completed",
+                "message": f"Your ride ({route_str}) is complete. Don't forget to rate your driver!",
+                "isRead": False,
+                "createdAt": datetime.now()
+            })
+            send_push_notification(pid, "Ride Completed", f"Your ride ({route_str}) is complete. Don't forget to rate your driver!", {"type": "ride_update"})
+        
+        print(f"Ride Finished via REST API: {ride_id}")
+        return jsonify({"success": True, "ride": parse_json(ride)}), 200
+        
+    except Exception as e:
+        print(f"Finish Ride API Error for {ride_id}: {e}")
+        return jsonify({"success": False, "msg": str(e)}), 500
+
+
 @app.route("/api/book-ride", methods=["POST", "OPTIONS"])
 def book_ride():
     return join_ride()
