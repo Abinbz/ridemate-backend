@@ -611,168 +611,118 @@ def post_ride():
         print(f"Create Ride DB Error: {e}")
         return jsonify({"success": False, "message": "Database error"}), 500
 
-@app.route("/api/search-rides", methods=["POST", "OPTIONS"])
-def search_rides():
-    data = safe_json()
-    start_loc = data.get('startingFrom', '').strip().lower()
-    end_loc = data.get('goingTo', '').strip().lower()
-    
-    # Geographic inputs for intelligent matching
-    user_start_lat = data.get('startLat')
-    user_start_lng = data.get('startLng')
-    user_end_lat = data.get('endLat')
-    user_end_lng = data.get('endLng')
-
+def normalize_ride(doc):
+    """Deeply standardizes a ride document for frontend and backend consistency."""
+    if not doc:
+        return None
     try:
-        print(f"[SEARCH] fetching rides for user: {user_id}")
+        # Convert BSON to standard DICT
+        ride = parse_json(doc)
         
-        # Optimized query: Find upcoming rides with seats AND exclude user if already booked
+        # Primary Identifier
+        ride["id"] = str(ride.pop("_id", ""))
+        
+        # Consistent Driver/Owner fields
+        ride["driverId"] = str(ride.get("driverId") or ride.get("createdBy") or "")
+        ride["createdBy"] = str(ride.get("createdBy") or ride.get("driverId") or "")
+        
+        # Driver Metadata fallback
+        ride["driverName"] = ride.get("driverName") or ride.get("driver") or "Unknown Driver"
+        ride["driver"] = ride.get("driverName") # For UI components expecting ride.driver
+        
+        # Location Mapping (Standardized keys vs database keys)
+        ride["from"] = ride.get("fromLocation") or ride.get("from") or "Unknown"
+        ride["to"] = ride.get("toLocation") or ride.get("to") or "Unknown"
+        
+        # Capacity & Status safety
+        ride["capacity"] = int(ride.get("capacity", 0))
+        ride["status"] = ride.get("status", "upcoming").lower()
+        
+        # Ensure passengers is always a list of objects with userId
+        raw_passengers = ride.get("passengers", [])
+        ride["passengers"] = []
+        for p in raw_passengers:
+            if isinstance(p, dict):
+                p["userId"] = str(p.get("userId") or p.get("user") or "")
+                ride["passengers"].append(p)
+                
+        return ride
+    except Exception as e:
+        print(f"[NORMALIZE ERROR] Malformed ride document: {e}")
+        return None
+
+@app.route('/api/search-rides', methods=['POST', 'OPTIONS'])
+def search_rides():
+    """Stable, production-ready search API that never crashes."""
+    if request.method == "OPTIONS":
+        return handle_options("search-rides")
+        
+    try:
+        data = request.get_json() or {}
+        user_id = str(data.get('userId') or "")
+        
+        from_loc = data.get("fromLocation") or data.get("from")
+        to_loc = data.get("toLocation") or data.get("to")
+        
+        print(f"[SEARCH] Request by {user_id or 'Anonymous'} | Query: {from_loc} -> {to_loc}")
+
+        # 1. Build strict database query
         query = {
             "status": "upcoming",
             "capacity": {"$gt": 0}
         }
-        
+
+        # Fuzzy matching for locations
+        if from_loc:
+            query["fromLocation"] = {"$regex": str(from_loc), "$options": "i"}
+        if to_loc:
+            query["toLocation"] = {"$regex": str(to_loc), "$options": "i"}
+            
+        # 2. Exclusions (Self-rides and duplicates)
         if user_id:
-            # Prevent showing rides the user is already a part of
             query["$and"] = [
+                {"createdBy": {"$ne": user_id}},
+                {"driverId": {"$ne": user_id}},
                 {"passengers.userId": {"$ne": user_id}},
-                {"passengers.user": {"$ne": user_id}} # Legacy field support
+                {"passengers.user": {"$ne": user_id}}
             ]
-            
-        if data.get('date'):
-            query["date"] = data.get('date')
-            
-        all_rides_cursor = rides_col.find(query)
-        all_rides = []
+
+        # 3. Fetch and normalize
+        cursor = rides_col.find(query).sort("createdAt", -1) # Latest first
+        all_results = []
         
-        for doc in all_rides_cursor:
-            ride = parse_json(doc)
-            ride["id"] = ride.pop("_id", None)
-            
-            # Exclude current user's own rides
-            driver_id = str(ride.get('createdBy') or ride.get('driverId'))
-            if user_id and driver_id == str(user_id):
-                continue
-            
-            # Exclude if user is already in passengers array (status is booked or joined)
-            passengers = ride.get('passengers', [])
-            if user_id and any(str(p.get('user')) == str(user_id) for p in passengers):
-                continue
-            
-            # Normalize fields for frontend compatibility
-            if not ride.get('driver') and ride.get('driverName'):
-                ride['driver'] = ride['driverName']
-            if not ride.get('from') and ride.get('fromLocation'):
-                ride['from'] = ride['fromLocation']
-            if not ride.get('to') and ride.get('toLocation'):
-                ride['to'] = ride['toLocation']
-            if not ride.get('driverId') and ride.get('createdBy'):
-                ride['driverId'] = ride['createdBy']
-            if not ride.get('createdBy') and ride.get('driverId'):
-                ride['createdBy'] = ride['driverId']
-                
-            all_rides.append(ride)
+        for doc in cursor:
+            normalized = normalize_ride(doc)
+            if normalized:
+                all_results.append(normalized)
 
-        if not all_rides:
-            return jsonify({"success": True, "recommended": [], "others": []}), 200
-
-        # --- 1. K-MEANS CLUSTERING FILTER ---
-        nearby_cluster_rides = all_rides
-        if user_start_lat is not None and user_start_lng is not None and len(all_rides) >= 1:
-            coords_pool = []
-            valid_rides_for_clustering = []
-            for r in all_rides:
-                lat = r.get("startLat")
-                lng = r.get("startLng")
-                if lat is not None and lng is not None:
-                    coords_pool.append([lat, lng])
-                    valid_rides_for_clustering.append(r)
-            
-            if coords_pool:
-                try:
-                    n_clusters = 3 if len(coords_pool) >= 3 else len(coords_pool)
-                    # We add user's start point to the pool just to see which cluster it hits
-                    temp_pool = coords_pool + [[user_start_lat, user_start_lng]]
-                    kmeans = KMeans(n_clusters=n_clusters, n_init='auto', random_state=42)
-                    kmeans.fit(temp_pool)
-                    
-                    user_cluster_label = kmeans.labels_[-1]
-                    ride_labels = kmeans.labels_[:-1]
-                    
-                    nearby_cluster_rides = [
-                        valid_rides_for_clustering[i] 
-                        for i, label in enumerate(ride_labels) 
-                        if label == user_cluster_label
-                    ]
-                    print(f"K-Means: Found {len(nearby_cluster_rides)} rides in user's cluster ({user_cluster_label})")
-                except Exception as ex:
-                    print(f"K-Means runtime error, falling back: {ex}")
-                    nearby_cluster_rides = all_rides
-
-        # --- 2. PRIMARY TEXT FILTER (Required by USER) ---
-        # Match based on From/To locations (trimmed, case-insensitive)
-        text_matches = []
-        for ride in all_rides:
-            r_from = ride.get('from', '').lower().strip()
-            r_to = ride.get('to', '').lower().strip()
-            
-            # Match if search terms are found within the ride's locations
-            from_match = not start_loc or start_loc in r_from
-            to_match = not end_loc or end_loc in r_to
-            
-            if from_match and to_match:
-                text_matches.append(ride)
+        # 4. Result Splitting (Recommended vs Others)
+        # For simplicity, we recommend the 3 most affordable or most recent rides
+        all_results.sort(key=lambda x: x.get("price", 0)) # Sort by price (cheapest recommended)
         
-        print(f"Text Match Filter: {len(text_matches)} rides matches '{start_loc}' -> '{end_loc}'")
+        recommended = all_results[:3]
+        others = all_results[3:]
 
-        # --- 3. GEOMETRIC RANKING (Refinement) ---
-        potential_matches = text_matches
-        if user_start_lat is not None and user_end_lat is not None:
-            for ride in potential_matches:
-                r_slat = ride.get('startLat')
-                r_slng = ride.get('startLng')
-                r_elat = ride.get('endLat')
-                r_elng = ride.get('endLng')
-                
-                if None not in [r_slat, r_slng, r_elat, r_elng]:
-                    s_dist = calculate_distance(user_start_lat, user_start_lng, r_slat, r_slng)
-                    e_dist = calculate_distance(user_end_lat, user_end_lng, r_elat, r_elng)
-                    ride["start_dist"] = round(s_dist, 2)
-                    ride["end_dist"] = round(e_dist, 2)
-                    # Add a small fitness boost for closer rides
-                    ride["geo_score"] = s_dist + e_dist
-                else:
-                    ride["geo_score"] = 999 # Default for rides without coords
+        return jsonify({
+            "success": True,
+            "count": len(all_results),
+            "recommended": recommended,
+            "others": others
+        }), 200
 
-        # --- 4. FITNESS CALCULATION (Genetic Algorithm simulation) ---
-        for ride in potential_matches:
-            geo_val = ride.get("geo_score", 999)
-            price = extract_numeric(ride.get("price", 0))
-            duration = extract_numeric(ride.get("duration", 30)) 
-            
-            # Simple fitness: lower score is better
-            fitness = (0.5 * min(geo_val, 10)) + (0.3 * (price/100)) + (0.2 * (duration/15))
-            ride["fitness_score"] = round(fitness, 2)
-            
-        # Sort by fitness
-        potential_matches.sort(key=lambda x: x.get("fitness_score", 9999))
-        
-        # --- 4. SPLIT RESULTS ---
-        recommended = potential_matches[:3]
-        others = potential_matches[3:]
-            
-        print(f"Search API: {len(potential_matches)} results returned ({len(recommended)} recommended)")
-        return jsonify({"success": True, "recommended": recommended, "others": others}), 200
-        
     except Exception as e:
-        print(f"Search Rides Error: {e}")
-        return jsonify({"success": False, "message": "Database calculation error"}), 500
+        print(f"[CRITICAL SEARCH ERROR] {e}")
+        return jsonify({
+            "success": False, 
+            "message": "Search pipeline error",
+            "debug": str(e)
+        }), 500
 
 @app.route("/api/cluster-rides", methods=["POST", "OPTIONS"])
 def cluster_rides():
     try:
         # Fetch all rides
-        cursor = rides_col.find({"status": "accepted"})
+        cursor = rides_col.find({"status": "upcoming"})
         rides_list = []
         X = []
         
@@ -840,7 +790,7 @@ def match_rides():
     DETOUR_LIMIT = 2.0  # in kilometers
     
     try:
-        cursor = rides_col.find({"status": "accepted"})
+        cursor = rides_col.find({"status": "upcoming"})
         matched_rides = []
         
         for doc in cursor:
@@ -890,7 +840,7 @@ def optimize_rides():
         return jsonify({"success": False, "message": "Missing geographic attributes for GA evaluation."}), 400
         
     try:
-        cursor = rides_col.find({"status": "accepted"})
+        cursor = rides_col.find({"status": "upcoming"})
         matched_rides = []
         
         # 1. Establish initial population constraint natively mapped logically by Detour limit (2km)
@@ -996,8 +946,7 @@ def book_ride_rest(ride_id=None):
             
         # Add passenger with both IDs for backward compatibility and decrement capacity
         new_passenger = {
-            "userId": user_id, # Standard field
-            "user": user_id,   # Legacy field support
+            "userId": user_id,
             "name": user.get('name') or user.get('username'),
             "collegeId": user.get('collegeId', 'N/A'),
             "status": "booked"
@@ -1028,7 +977,7 @@ def book_ride_rest(ride_id=None):
             user_id=user_id,
             title="Booking Confirmed",
             message=f"Success! Your seat is reserved for the ride to {ride.get('toLocation')}.",
-            notify_type="RIDE_ACCEPTED",
+            notify_type="RIDE_UPCOMING",
             data={"rideId": ride_id}
         )
         
@@ -1038,54 +987,53 @@ def book_ride_rest(ride_id=None):
         print(f"Booking Error: {e}")
         return jsonify({"success": False, "message": str(e)}), 500
 
-@app.route("/api/join-ride", methods=["POST", "PUT", "OPTIONS"])
-@app.route("/api/rides/<ride_id>/join", methods=["PUT", "OPTIONS"])
-def join_ride_rest(ride_id=None):
-    """Passenger check-in (physical join)."""
-    if request.method == "OPTIONS":
-        return handle_options(f"rides/{ride_id}/join")
-    
-    data = safe_json()
-    user_id = data.get('userId')
-    ride_id = ride_id or data.get('rideId')
-    
-    if not user_id or not ride_id:
-        return jsonify({"success": False, "message": "Missing userId or rideId"}), 400
-    
+@app.route('/api/join-ride', methods=['POST'])
+def join_ride():
     try:
+        data = request.get_json() or {}
+        ride_id = data.get("rideId")
+        user_id = data.get("userId")
+
         ride = rides_col.find_one({"_id": ObjectId(ride_id)})
-        if not ride: return jsonify({"success": False, "message": "Ride not found"}), 404
-        
-        # Guard: Only allow joining if the driver has started the ride
-        if ride.get('status') != 'ongoing':
-            return jsonify({
-                "success": False, 
-                "message": "Ride has not started yet. You can only join once the driver starts the journey."
-            }), 400
-            
-        # Update specific passenger record
-        res = rides_col.update_one(
-            {"_id": ObjectId(ride_id), "passengers.user": user_id},
-            {"$set": {
-                "passengers.$.joined": True,
-                "passengers.$.status": "joined" # Standardized status update
-            }}
+
+        if not ride:
+            return jsonify({"success": False, "message": "Ride not found"}), 404
+
+        if ride.get("status") != "ongoing":
+            return jsonify({"success": False, "message": "Ride not started"}), 400
+
+        passengers = ride.get("passengers", [])
+        updated = False
+
+        for p in passengers:
+            if str(p.get("userId")) == str(user_id):
+                if p.get("status") == "joined":
+                    return jsonify({"success": False, "message": "Already joined"}), 400
+
+                p["status"] = "joined"
+                updated = True
+
+        if not updated:
+            return jsonify({"success": False, "message": "User not booked"}), 400
+
+        rides_col.update_one(
+            {"_id": ObjectId(ride_id)},
+            {"$set": {"passengers": passengers}}
         )
-        
-        if res.modified_count > 0:
-            # Notify driver
-            driver_id = ride.get('driverId') or ride.get('createdBy')
-            create_notification(
-                user_id=driver_id,
-                title="Passenger Joined",
-                message="A passenger has joined the ride and is now with you.",
-                notify_type="PASSENGER_JOINED",
-                data={"rideId": ride_id}
-            )
-            return jsonify({"success": True }), 200
-        
-        return jsonify({"success": False, "message": "Passenger not found or already joined"}), 404
+
+        # Notify driver
+        create_notification(
+            user_id=ride.get("driverId") or ride.get("createdBy"),
+            title="Passenger Joined 👤",
+            message="A passenger has joined your ride",
+            notify_type="PASSENGER_JOINED",
+            data={"rideId": ride_id}
+        )
+
+        return jsonify({"success": True, "message": "Joined ride successfully"})
+
     except Exception as e:
+        print("JOIN ERROR:", e)
         return jsonify({"success": False, "message": str(e)}), 500
 
 @app.route("/api/start-ride", methods=["POST", "OPTIONS"])
@@ -1106,13 +1054,15 @@ def start_ride():
         
         # Notify all passengers
         for p in ride.get('passengers', []):
-            create_notification(
-                user_id=p['user'],
-                title="Ride Started",
-                message=f"Your ride to {ride.get('toLocation')} has started. Track it now!",
-                notify_type="RIDE_STARTED",
-                data={"rideId": ride_id}
-            )
+            passenger_id = p.get('userId') or p.get('user')
+            if passenger_id:
+                create_notification(
+                    user_id=passenger_id,
+                    title="Ride Started 🚗",
+                    message="Your ride has started. Join now!",
+                    notify_type="RIDE_STARTED",
+                    data={"rideId": ride_id}
+                )
         
         return jsonify({"success": True, "message": "Ride started"}), 200
     except Exception as e:
@@ -1154,14 +1104,16 @@ def finish_ride(ride_id=None):
         
         # Notify passengers
         passengers = ride.get('passengers', [])
-        # Legacy fallback if passengers is empty
-        if not passengers:
-            booked_users = ride.get('bookedUsers', [])
-            for pid in booked_users:
-                create_notification(user_id=pid, title="Trip Completed", message="You've reached your destination. Please rate the ride!", notify_type="RIDE_COMPLETED")
-        else:
-            for p in passengers:
-                create_notification(user_id=p['user'], title="Trip Completed", message="You've reached your destination. Please rate the ride!", notify_type="RIDE_COMPLETED")
+        for p in passengers:
+            passenger_id = p.get('userId') or p.get('user')
+            if passenger_id:
+                create_notification(
+                    user_id=passenger_id,
+                    title="Ride Completed ✅",
+                    message="Ride completed successfully",
+                    notify_type="RIDE_COMPLETED",
+                    data={"rideId": ride_id}
+                )
             
         return jsonify({"success": True, "message": "Ride completed"}), 200
         return jsonify({"success": True, "message": "Ride completed"}), 200
@@ -1184,7 +1136,7 @@ def _normalize_ride(doc, role, current_date_str):
     ride["to"] = to_loc
     
     stored_status = ride.get("status", "upcoming")
-    if stored_status.lower() in ["scheduled", "upcoming", "accepted", "available"]:
+    if stored_status.lower() in ["scheduled", "upcoming", "available"]:
         ride["status"] = "upcoming"
     else:
         ride["status"] = stored_status.lower() if isinstance(stored_status, str) else stored_status
@@ -1235,61 +1187,66 @@ def get_my_rides_v2(user_id):
 
 @app.route("/api/cancel-ride-passenger", methods=["POST", "OPTIONS"])
 def cancel_ride_passenger():
-    """Passenger booking termination (logic standard fix)."""
+    """Stable passenger cancellation that preserves ride status."""
     if request.method == "OPTIONS":
         return handle_options("cancel-ride-passenger")
         
-    data = safe_json()
-    ride_id = data.get('rideId')
-    user_id = data.get('userId')
-    
-    if not ride_id or not user_id:
-        return jsonify({"success": False, "message": "Missing rideId or userId"}), 400
-        
     try:
+        data = request.get_json() or {}
+        ride_id = data.get('rideId')
+        user_id = str(data.get('userId') or "")
+        
+        if not ride_id or not user_id:
+            return jsonify({"success": False, "message": "Missing rideId or userId"}), 400
+            
         ride = rides_col.find_one({"_id": ObjectId(ride_id)})
         if not ride:
             return jsonify({"success": False, "message": "Ride not found"}), 404
             
-        # Safety Check: Is user actually in this ride?
+        # 1. Existence check in manifest
         passengers = ride.get('passengers', [])
-        if not any(str(p.get('userId') or p.get('user')) == str(user_id) for p in passengers):
-             return jsonify({"success": False, "message": "User not in ride"}), 400
+        if not any(str(p.get('userId') or p.get('user')) == user_id for p in passengers):
+             return jsonify({"success": False, "message": "User not part of this ride"}), 400
              
-        # Guard: Cannot cancel a completed ride
+        # 2. Status Guard (Cannot cancel if already finished)
         if ride.get('status') == 'completed':
             return jsonify({"success": False, "message": "Cannot cancel a completed ride"}), 400
-            
-        # Filter out the cancelling user
-        updated_passengers = [
-            p for p in passengers 
-            if str(p.get('userId') or p.get('user')) != str(user_id)
-        ]
-        
-        # Atomic Update: Remove from list AND increase capacity. DO NOT TOUCH STATUS.
-        rides_col.update_one(
+
+        # 3. Atomic Update: Pull user and Increment Capacity
+        # This ensures the operation is thread-safe and never loses a seat count.
+        result = rides_col.update_one(
             {"_id": ObjectId(ride_id)},
             {
-                "$set": {"passengers": updated_passengers},
+                "$pull": {
+                    "passengers": {
+                        "$or": [
+                            {"userId": user_id},
+                            {"user": user_id}
+                        ]
+                    }
+                },
                 "$inc": {"capacity": 1}
             }
         )
         
-        print(f"[CANCEL] {user_id} removed from ride {ride_id}")
-        
-        # Notify Driver
-        driver_id = ride.get('driverId') or ride.get('createdBy')
-        if driver_id:
-            route_str = f"{ride.get('from')} → {ride.get('to')}"
-            create_notification(
-                user_id=driver_id,
-                title="Booking Cancelled",
-                message=f"A passenger cancelled their booking for {route_str}",
-                notify_type="cancel",
-                data={"rideId": str(ride_id)}
-            )
+        if result.modified_count > 0:
+            print(f"[CANCEL SUCCESS] User {user_id} removed from Ride {ride_id}. Capacity restored.")
             
-        return jsonify({"success": True, "message": "Booking cancelled"}), 200
+            # Notify Driver
+            driver_id = ride.get('driverId') or ride.get('createdBy')
+            if driver_id:
+                route_str = f"{ride.get('fromLocation') or ride.get('from')} → {ride.get('toLocation') or ride.get('to')}"
+                create_notification(
+                    user_id=str(driver_id),
+                    title="Booking Cancelled",
+                    message=f"A passenger cancelled their booking for {route_str}",
+                    notify_type="cancel",
+                    data={"rideId": str(ride_id)}
+                )
+            
+            return jsonify({"success": True, "message": "Booking cancelled successfully"}), 200
+        else:
+            return jsonify({"success": False, "message": "Cancellation failed"}), 500
         
     except Exception as e:
         print(f"Cancel Passenger Error: {e}")
@@ -1355,7 +1312,7 @@ def cancel_ride(ride_id):
             return jsonify({"success": False, "message": "Ride not found"}), 404
             
         # Only upcoming rides can be cancelled via this generic route
-        if ride.get('status') not in ['upcoming', 'accepted']:
+        if ride.get('status') not in ['upcoming']:
             return jsonify({"success": False, "message": "Only upcoming rides can be cancelled"}), 400
             
         # Optimization: Usually called by driver. 
@@ -1695,6 +1652,35 @@ def get_user_ratings(user_id):
 
 # --- Admin Routes ---
 
+@app.route("/api/admin/rescue-rides", methods=["POST", "OPTIONS"])
+def rescue_rides():
+    """Admin tool to restore incorrectly cancelled rides to 'upcoming'."""
+    if request.method == "OPTIONS":
+        return handle_options("admin/rescue-rides")
+    try:
+        # Find rides that are cancelled but have passengers
+        # These are likely victims of the legacy cancellation bug.
+        query = {
+            "status": "cancelled",
+            "passengers": {"$exists": True, "$ne": []}
+        }
+        
+        result = rides_col.update_many(
+            query,
+            {"$set": {"status": "upcoming"}}
+        )
+        
+        print(f"[RESCUE] Successfully restored {result.modified_count} rides to 'upcoming'.")
+        return jsonify({
+            "success": True, 
+            "message": f"Restored {result.modified_count} rides.",
+            "modified": result.modified_count
+        }), 200
+        
+    except Exception as e:
+        print(f"[RESCUE ERROR] {e}")
+        return jsonify({"success": False, "message": str(e)}), 500
+
 @app.route("/api/admin/users", methods=["GET", "OPTIONS"])
 def admin_get_users():
     try:
@@ -1785,19 +1771,31 @@ def verify_user_decision(user_id_url=None):
         update_data["verificationStatus"] = overall_status
         update_data["isVerified"] = (overall_status == "approved")
 
-        # Part 1: Promote as Driver Logic
-        final_role = "user"
-        promote_to_driver = False
-        
-        if overall_status == "approved":
-            if promote:
-                final_role = "driver"
-                promote_to_driver = True
-            else:
-                final_role = "user"
+        # Part 1: Promote as Driver Logic (System Synchronization)
+        if data.get("promoteToDriver") == True:
+            users_col.update_one(
+                {"_id": ObjectId(user_id)},
+                {
+                    "$set": {
+                        "role": "driver",
+                        "isDriver": True,
+                        "isVerified": True
+                    }
+                }
+            )
 
-        update_data["role"] = final_role
-        update_data["isDriver"] = promote_to_driver
+            create_notification(
+                user_id=user_id,
+                title="You are now a Driver 🚗",
+                message="Your account has been upgraded. You can now post rides.",
+                notify_type="ROLE_UPGRADED"
+            )
+        else:
+             # Standard approval if not promoting
+             if overall_status == "approved":
+                 update_data["isVerified"] = True
+             else:
+                 update_data["isVerified"] = False
 
         # Update the database
         users_col.update_one(
@@ -1806,9 +1804,9 @@ def verify_user_decision(user_id_url=None):
         )
 
         # Part 5: Log after update
-        print(f"[ADMIN] Decision Finalized for: {user_id} - Status: {overall_status}")
+        print(f"[ADMIN] Decision Finalized for: {user_id} - Status: {overall_status} - Direct Promotion: {promote}")
 
-        # Send Notifications (using foundation from previous turns)
+        # Send Notifications (Standardized)
         notif_type = "KYC_APPROVED" if overall_status == "approved" else "KYC_REJECTED"
         rejection_reason = ""
         
@@ -1836,11 +1834,12 @@ def verify_user_decision(user_id_url=None):
         
         # Synchronize verifications_col status if used
         verifications_col.update_one({"userId": user_id}, {"$set": {"status": overall_status}})
-        # Return the updated user object for frontend sync
+        
+        # Return the updated user object for frontend sync as requested
         updated_user = users_col.find_one({"_id": ObjectId(user_id)})
         return jsonify({
             "success": True, 
-            "message": "Decision finalized and roles synced",
+            "message": "User verification finalized and roles synced.",
             "user": parse_json(updated_user)
         }), 200
         

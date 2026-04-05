@@ -2,55 +2,77 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import LoadingSpinner from '../shared/LoadingSpinner';
 import { API_BASE_URL } from '../../config/api';
+import { showNotification } from '../../utils/notifications';
 
-const RideCard = ({ ride, onClick }) => (
-  // ... existing RideCard component ...
+const RideCard = ({ ride, onClick, onJoin, activeTab }) => {
+  const userId = localStorage.getItem('userId');
+  const isPassenger = activeTab === 'booked';
+  const showJoinButton = isPassenger && 
+                        ride.status === 'ongoing' && 
+                        (ride.passengers || []).find(p => String(p.userId || p.user) === String(userId))?.status === 'booked';
 
-  <div
-    onClick={onClick}
-    className="bg-white border border-gray-100 rounded-3xl p-6 shadow-sm space-y-4 hover:border-black transition-all cursor-pointer group active:scale-[0.98]"
-  >
-    {/* Top Row: Status & Role */}
-    <div className="flex items-center justify-between">
-      <span className="bg-gray-50 text-black px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border border-gray-100 group-hover:bg-black group-hover:text-white group-hover:border-black transition-colors">
-        {ride.status}
-      </span>
-      <span className="text-[10px] font-bold text-gray-300 uppercase tracking-widest">
-        {ride.role}
-      </span>
-    </div>
-
-    {/* Route & Price */}
-    <div className="flex items-end justify-between gap-4">
-      <div className="space-y-1">
-        <h3 className="text-sm font-black text-black leading-tight">
-          {ride.from} <span className="text-gray-300 px-1">→</span> {ride.to}
-        </h3>
-        <p className="text-[11px] font-bold text-gray-400">
-          {ride.date} • {ride.time || ride.start || ''}
-        </p>
+  return (
+    <div
+      onClick={onClick}
+      className="bg-white border border-gray-100 rounded-3xl p-6 shadow-sm space-y-4 hover:border-black transition-all cursor-pointer group active:scale-[0.98]"
+    >
+      {/* Top Row: Status & Role */}
+      <div className="flex items-center justify-between">
+        <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border transition-colors ${
+          ride.status === 'ongoing' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-gray-50 text-black border-gray-100'
+        }`}>
+          {ride.status}
+        </span>
+        <span className="text-[10px] font-bold text-gray-300 uppercase tracking-widest">
+          {ride.role}
+        </span>
       </div>
-      <p className="text-lg font-black text-black leading-none">
-        {ride.price}
-      </p>
-    </div>
 
-    {/* Vehicle Info */}
-    <div className="pt-4 border-t border-gray-50 flex items-center justify-between">
-      <div className="flex items-center gap-3">
-        <div className="w-8 h-8 bg-gray-50 rounded-xl flex items-center justify-center text-[10px] font-black text-black">
-          {(ride.vehicle || ride.vehicleType || 'V').split(' ')[0][0]}
+      {/* Route & Price */}
+      <div className="flex items-end justify-between gap-4">
+        <div className="space-y-1">
+          <h3 className="text-sm font-black text-black leading-tight">
+            {ride.from} <span className="text-gray-300 px-1">→</span> {ride.to}
+          </h3>
+          <p className="text-[11px] font-bold text-gray-400">
+            {ride.date} • {ride.time || ride.start || ''}
+          </p>
         </div>
-        <p className="text-[10px] font-black text-black uppercase tracking-widest">
-          {ride.vehicle || `${ride.vehicleType} (${ride.vehicleName})`}
+        <p className="text-lg font-black text-black leading-none">
+          {ride.price}
         </p>
       </div>
-      <div className="text-gray-200">
-        &rarr;
+
+      {/* Vehicle Info */}
+      <div className="pt-4 border-t border-gray-50 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 bg-gray-50 rounded-xl flex items-center justify-center text-[10px] font-black text-black">
+            {(ride.vehicle || ride.vehicleType || 'V').split(' ')[0][0]}
+          </div>
+          <p className="text-[10px] font-black text-black uppercase tracking-widest">
+            {ride.vehicle || `${ride.vehicleType} (${ride.vehicleName})`}
+          </p>
+        </div>
+        
+        {showJoinButton ? (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onJoin(ride.id || ride._id);
+            }}
+            className="bg-emerald-500 text-white px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-emerald-600 active:scale-95 transition-all shadow-lg shadow-emerald-500/20"
+          >
+            Join Ride
+          </button>
+        ) : (
+          <div className="text-gray-200">
+            &rarr;
+          </div>
+        )}
       </div>
     </div>
-  </div>
-);
+  );
+};
 
 function MyRidesPage() {
   const navigate = useNavigate();
@@ -62,35 +84,56 @@ function MyRidesPage() {
   const [loading, setLoading] = useState(true);
   const sections = ['Upcoming', 'Ongoing', 'Completed'];
 
+  const fetchMyRides = async () => {
+    const userId = localStorage.getItem('userId');
+    if (!userId) {
+      setLoading(false);
+      return;
+    }
+
+    try {
+      console.log("API CALL:", `${API_BASE_URL}/api/my-rides/${userId}`);
+      const response = await fetch(`${API_BASE_URL}/api/my-rides/${userId}`);
+      const data = await response.json();
+      console.log('My Rides API response:', data);
+
+      if (response.ok && data.success) {
+        setRides({
+          posted: data.posted || { upcoming: [], ongoing: [], completed: [] },
+          booked: data.booked || { upcoming: [], ongoing: [], completed: [] }
+        });
+      }
+    } catch (err) {
+      console.error('Fetch My Rides error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchMyRides = async () => {
-      const userId = localStorage.getItem('userId');
-      if (!userId) {
-        setLoading(false);
-        return;
-      }
-
-      try {
-        console.log("API CALL:", `${API_BASE_URL}/api/my-rides/${userId}`);
-        const response = await fetch(`${API_BASE_URL}/api/my-rides/${userId}`);
-        const data = await response.json();
-        console.log('My Rides API response:', data);
-
-        if (response.ok && data.success) {
-          setRides({
-            posted: data.posted || { upcoming: [], ongoing: [], completed: [] },
-            booked: data.booked || { upcoming: [], ongoing: [], completed: [] }
-          });
-        }
-      } catch (err) {
-        console.error('Fetch My Rides error:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchMyRides();
   }, []);
+
+  const handleJoinRide = async (rideId) => {
+    const userId = localStorage.getItem('userId');
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/join-ride`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, rideId })
+      });
+      const data = await response.json();
+      if (data.success) {
+        showNotification("Passenger Joined 👤", `You have successfully joined the ride to ${ride.toLocation || ride.to}`);
+        // Refresh the list to show "Joined" or update status
+        await fetchMyRides();
+      } else {
+        alert(data.message || "Failed to join ride");
+      }
+    } catch (err) {
+      console.error("Join ride error:", err);
+    }
+  };
 
   const getRidesForSection = (section) => {
     const key = section.toLowerCase();
@@ -168,6 +211,8 @@ function MyRidesPage() {
                       <RideCard
                         key={ride.id || ride._id}
                         ride={ride}
+                        activeTab={activeTab}
+                        onJoin={handleJoinRide}
                         onClick={() => navigate('/user/my-rides/details', { state: { ride } })}
                       />
                     ))}

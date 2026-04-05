@@ -50,7 +50,7 @@ const NotificationsPage = () => {
             case 'KYC_REJECTED': return '❌';
             case 'USER_BANNED': return '🚫';
             case 'ROLE_UPGRADED': return '🏎️';
-            case 'RIDE_ACCEPTED': return '🤝';
+            case 'RIDE_UPCOMING': return '🤝';
             case 'RIDE_STARTED': return '🚗';
             case 'RIDE_COMPLETED': return '🏁';
             case 'PASSENGER_JOINED': return '🧑‍🤝‍🧑';

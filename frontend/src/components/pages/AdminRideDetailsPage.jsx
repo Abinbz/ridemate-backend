@@ -114,20 +114,23 @@ const AdminRideDetailsPage = () => {
 
                  <div className="space-y-4">
                     <h4 className="text-[10px] font-black text-black uppercase tracking-widest px-1">Manifest Pool</h4>
-                    {(ride.bookedUsers || []).length > 0 ? (
-                        (ride.bookedUsers || []).map((passengerId, i) => (
-                            <div key={i} className="bg-gray-50/50 border border-transparent hover:border-gray-100 hover:bg-white p-5 rounded-3xl flex items-center justify-between gap-4 transition-all group">
+                    {(ride.passengers || []).length > 0 ? (
+                        (ride.passengers || []).map((passenger, i) => (
+                            <div key={passenger.userId || i} className="bg-gray-50/50 border border-transparent hover:border-gray-100 hover:bg-white p-5 rounded-3xl flex items-center justify-between gap-4 transition-all group">
                                 <div className="flex items-center gap-4">
-                                    <div className="w-10 h-10 bg-black text-white rounded-2xl flex items-center justify-center text-xs font-black shadow-lg shadow-gray-200 transition-transform group-hover:scale-105">P</div>
-                                    <div>
-                                        <p className="text-xs font-black text-black leading-none uppercase tracking-tight">ID: {passengerId.slice(-6).toUpperCase()}</p>
-                                        <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mt-1">Authorized Passenger</p>
+                                    <div className="w-10 h-10 bg-black text-white rounded-2xl flex items-center justify-center text-xs font-black">
+                                        {(passenger.name || 'P')[0].toUpperCase()}
                                     </div>
-                                </div>
-                                <div className="w-8 h-8 rounded-full bg-emerald-50 text-emerald-500 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                    </svg>
+                                    <div>
+                                        <div className="flex items-center gap-2">
+                                            <p className="text-xs font-black text-black leading-none uppercase tracking-tight">
+                                                {passenger.name} - {passenger.collegeId} - {passenger.status}
+                                            </p>
+                                        </div>
+                                        <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest mt-1">
+                                            ID: {(passenger.userId || passenger.user || '...').slice(-6).toUpperCase()}
+                                        </p>
+                                    </div>
                                 </div>
                             </div>
                         ))

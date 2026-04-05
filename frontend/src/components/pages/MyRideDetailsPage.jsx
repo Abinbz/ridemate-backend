@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useToast } from '../../context/ToastContext';
 import { API_BASE_URL } from '../../config/api';
+import { showNotification } from '../../utils/notifications';
 
 const getPassengers = (ride) => {
   if (ride && ride.passengers && ride.passengers.length > 0) {
@@ -156,6 +157,7 @@ function MyRideDetailsPage() {
       });
       const data = await response.json();
       if (response.ok && data.success) {
+        showNotification("Ride Started 🚗", `Your ride to ${ride.toLocation || ride.to} has started!`);
         showToast("Ride started!", "success");
         await fetchRide();
       } else {
@@ -183,6 +185,7 @@ function MyRideDetailsPage() {
       console.log("Finish response:", data);
 
       if (data.success) {
+        showNotification("Ride Completed ✅", `Hope you had a safe journey to ${ride.toLocation || ride.to}`);
         showToast('Ride finished successfully!', 'success');
         // Optimistic UI update
         setRide(prev => ({ ...prev, status: 'completed' }));
@@ -199,13 +202,14 @@ function MyRideDetailsPage() {
   const handleCheckIn = async () => {
     try {
       const rideId = ride.id || ride._id;
-      const response = await fetch(`${API_BASE_URL}/api/rides/${rideId}/join`, {
-        method: 'PUT',
+      const response = await fetch(`${API_BASE_URL}/api/join-ride`, {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: currentUserId })
+        body: JSON.stringify({ userId: currentUserId, rideId })
       });
       const data = await response.json();
       if (data.success) {
+        showNotification("Passenger Joined 👤", `You have checked into the ride to ${ride.toLocation || ride.to}`);
         showToast('Successfully checked into the ride!', 'success');
         await fetchRide();
       } else {
@@ -329,7 +333,16 @@ function MyRideDetailsPage() {
                       {passenger.avatar}
                     </div>
                     <div>
-                      <p className="text-xs font-black text-black leading-none mb-1">{passenger.name}</p>
+                      <div className="flex items-center gap-2 mb-1">
+                        <p className="text-xs font-black text-black leading-none">{passenger.name}</p>
+                        <span className={`text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border transition-all ${
+                          passenger.status === 'joined' 
+                            ? 'bg-emerald-50 text-emerald-600 border-emerald-100' 
+                            : 'bg-gray-50 text-gray-400 border-gray-100'
+                        }`}>
+                          {passenger.status === 'joined' ? 'Joined ✅' : 'Booked 🕒'}
+                        </span>
+                      </div>
                       <div className="flex items-center gap-1 text-[9px] font-bold text-gray-300 uppercase tracking-widest">
                         <span>Rating</span>
                         <span className="text-black font-black">{passenger.rating} ⭐</span>
@@ -557,7 +570,7 @@ function MyRideDetailsPage() {
 
         {/* ── Action Buttons ── */}
         <div className="pt-8 space-y-4">
-          {isDriver && (ride.status === 'upcoming' || ride.status === 'accepted') && (
+          {isDriver && (ride.status === 'upcoming') && (
             <button
               onClick={handleStartRide}
               className="w-full bg-black text-white py-5 rounded-[2rem] text-[10px] font-black uppercase tracking-[0.2em] shadow-lg shadow-black/10 hover:opacity-90 active:scale-[0.98] transition-all"

@@ -178,8 +178,8 @@ const AdminVerificationPage = () => {
 
             if (data.success) {
                 setMessage({ text: 'Decision finalized successfully', type: 'success' });
-                // Synchronization: Remove user from local list manually OR refetch
-                setVerifications(prev => prev.filter(v => v.userId !== userId));
+                // Synchronization: Refetch the list to ensure all state is current and promoted user is updated.
+                await fetchVerifications();
                 setExpandedUser(null);
                 setTimeout(() => setMessage({ text: '', type: '' }), 3000);
             } else {

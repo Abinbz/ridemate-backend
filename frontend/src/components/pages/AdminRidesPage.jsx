@@ -32,7 +32,7 @@ const AdminRidesPage = () => {
         switch (status) {
             case 'completed': return 'bg-emerald-500 text-white';
             case 'ongoing': return 'bg-blue-500 text-white';
-            case 'accepted': return 'bg-amber-500 text-white';
+            case 'upcoming': return 'bg-amber-500 text-white';
             case 'cancelled': return 'bg-red-500 text-white';
             default: return 'bg-gray-100 text-gray-400';
         }
@@ -67,7 +67,7 @@ const AdminRidesPage = () => {
                                     <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest leading-none">Fleet Commander</p>
                                 </div>
                                 <span className={`text-[8px] font-black uppercase tracking-widest px-3 py-1.5 rounded-full shadow-sm shadow-gray-200 ${getStatusStyle(ride.status)}`}>
-                                    {ride.status || 'accepted'}
+                                    {ride.status || 'upcoming'}
                                 </span>
                             </div>
 

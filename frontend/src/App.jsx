@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { API_BASE_URL } from './config/api';
 import './App.css';
 import Authentication from './components/Authentication';
 import UserHome from './components/UserHome';
@@ -54,6 +55,10 @@ function AppContent() {
   const [isInstalled, setIsInstalled] = useState(false);
 
   useEffect(() => {
+    if ("Notification" in window) {
+      Notification.requestPermission();
+    }
+
     // 1. Detect if app is already installed
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
     if (isStandalone || window.navigator.standalone) {
@@ -93,6 +98,40 @@ function AppContent() {
   }, [deferredPrompt]);
 
   const showInstall = deferredPrompt !== null;
+  const userId = localStorage.getItem('userId');
+
+  // Real-time (polling) notification support for demo
+  useEffect(() => {
+    if (!userId) return;
+
+    const checkNewNotifications = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/notifications/unread-count/${userId}`);
+        const data = await res.json();
+        
+        if (data.success && data.count > 0) {
+           // Fetch the latest unread ones
+           const nRes = await fetch(`${API_BASE_URL}/api/notifications?userId=${userId}`);
+           const nData = await nRes.json();
+           if (nData.success) {
+              const latestUnread = nData.notifications.filter(n => !n.isRead)[0];
+              if (latestUnread) {
+                 import('./utils/notifications').then(({ showNotification }) => {
+                    showNotification(latestUnread.title, latestUnread.message);
+                 });
+                 // Mark it as read immediately for the demo so it doesn't repeat
+                 fetch(`${API_BASE_URL}/api/notifications/read/${latestUnread._id || latestUnread.id}`, { method: 'POST' });
+              }
+           }
+        }
+      } catch (err) {
+        console.error("Poller Error:", err);
+      }
+    };
+
+    const interval = setInterval(checkNewNotifications, 10000); // Check every 10s
+    return () => clearInterval(interval);
+  }, [userId]);
 
   return (
     <PWAContext.Provider value={{ handleInstall, showInstall, isInstalled }}>

@@ -11,12 +11,12 @@ def migrate():
         
         print("Connected to MongoDB for lifecycle transition.")
         
-        # 1. Update status: 'upcoming' -> 'accepted'
-        result_upcoming = rides_col.update_many(
-            {"status": "upcoming"},
-            {"$set": {"status": "accepted"}}
+        # 1. Update status: 'accepted' -> 'upcoming'
+        result_accepted = rides_col.update_many(
+            {"status": "accepted"},
+            {"$set": {"status": "upcoming"}}
         )
-        print(f"Updated {result_upcoming.modified_count} rides from 'upcoming' to 'accepted'.")
+        print(f"Updated {result_accepted.modified_count} rides from 'accepted' to 'upcoming'.")
         
         # 2. Ensure ALL rides have a 'passengers' array
         result_init = rides_col.update_many(
