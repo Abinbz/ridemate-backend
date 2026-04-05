@@ -84,19 +84,20 @@ function MyRideDetailsPage() {
     
     const userId = localStorage.getItem('userId');
     const rideId = ride.id || ride._id;
-    const isDriver = ride.role === 'Driver';
     const url = `${API_BASE_URL}/api/cancel-ride/${rideId}`;
     
     setCancelling(true);
     try {
-      console.log("API CALL:", url, 'DELETE');
+      console.log("API CALL:", url, 'POST');
       const response = await fetch(url, {
-        method: 'DELETE'
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId })
       });
       const data = await response.json();
       
       if (response.ok && data.success) {
-        showToast(data.message || "Ride cancelled successfully", "success");
+        showToast(data.message || "Ride updated successfully", "success");
         navigate('/user/home', { state: { activeTab: 'my-rides' } });
       } else {
         showToast(data.message || 'Failed to cancel ride', "error");
