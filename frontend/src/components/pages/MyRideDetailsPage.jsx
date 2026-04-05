@@ -4,12 +4,14 @@ import { useToast } from '../../context/ToastContext';
 import { API_BASE_URL } from '../../config/api';
 
 const getPassengers = (ride) => {
-  if (ride && ride.passengerDetails && ride.passengerDetails.length > 0) {
-    return ride.passengerDetails.map((p, i) => ({
-      id: p.userId || i,
+  if (ride && ride.passengers && ride.passengers.length > 0) {
+    return ride.passengers.map((p, i) => ({
+      id: p.user || p.userId || i,
       name: p.name || 'Unknown',
       rating: p.rating || 0,
-      avatar: p.avatar || (p.name || 'U')[0].toUpperCase()
+      avatar: p.avatar || (p.name || 'U')[0].toUpperCase(),
+      joined: p.joined || p.status === 'joined',
+      status: p.status || (p.joined ? 'joined' : 'booked')
     }));
   }
   return [];
@@ -194,7 +196,7 @@ function MyRideDetailsPage() {
     }
   };
 
-  const handleJoinParticipation = async () => {
+  const handleCheckIn = async () => {
     try {
       const rideId = ride.id || ride._id;
       const response = await fetch(`${API_BASE_URL}/api/rides/${rideId}/join`, {
@@ -276,8 +278,12 @@ function MyRideDetailsPage() {
         {/* ── Ride Info Card ── */}
         <div className="bg-white border border-gray-100 rounded-3xl p-8 shadow-sm space-y-6">
           <div className="flex items-center justify-between">
-            <span className="bg-black text-white px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest">
-              {ride.status}
+            <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${
+              ride.status === 'ongoing' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 
+              ride.status === 'completed' ? 'bg-gray-50 text-gray-400 border-gray-100' : 
+              'bg-black text-white'
+            }`}>
+              {ride.status || 'UPCOMING'}
             </span>
             <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
               {ride.role}
@@ -497,9 +503,9 @@ function MyRideDetailsPage() {
               </div>
 
               {/* Passenger Check-in Action */}
-              {ride.role === 'Passenger' && ride.status === 'ongoing' && !((ride.passengers || []).find(p => p.user === currentUserId)?.joined) && (
+              {ride.role === 'Passenger' && ride.status === 'ongoing' && !((ride.passengers || []).find(p => p.user === currentUserId)?.joined || (ride.passengers || []).find(p => p.user === currentUserId)?.status === 'joined') && (
                 <button
-                  onClick={handleJoinParticipation}
+                  onClick={handleCheckIn}
                   className="w-full bg-emerald-500 text-white py-4 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] shadow-lg shadow-emerald-500/20 hover:bg-emerald-600 active:scale-95 transition-all mt-4"
                 >
                   Confirm Joining (Check-in)
@@ -551,7 +557,7 @@ function MyRideDetailsPage() {
 
         {/* ── Action Buttons ── */}
         <div className="pt-8 space-y-4">
-          {isDriver && ride.status === 'accepted' && (
+          {isDriver && (ride.status === 'upcoming' || ride.status === 'accepted') && (
             <button
               onClick={handleStartRide}
               className="w-full bg-black text-white py-5 rounded-[2rem] text-[10px] font-black uppercase tracking-[0.2em] shadow-lg shadow-black/10 hover:opacity-90 active:scale-[0.98] transition-all"

@@ -31,7 +31,7 @@ function NotificationPage() {
     if (!userId) return;
 
     try {
-      const url = `${API_BASE_URL}/api/notifications/${userId}`;
+      const url = `${API_BASE_URL}/api/notifications?userId=${userId}`;
       console.log("API CALL:", url, 'GET');
       const response = await fetch(url);
       const data = await response.json();
@@ -51,10 +51,10 @@ function NotificationPage() {
     if (!userId) return;
 
     try {
-      const url = `${API_BASE_URL}/api/notifications/mark-read`;
-      console.log("API CALL:", url, 'POST');
+      const url = `${API_BASE_URL}/api/notifications/read`;
+      console.log("API CALL:", url, 'PUT');
       await fetch(url, {
-        method: 'POST',
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId })
       });

@@ -184,30 +184,32 @@ except Exception as e:
 def send_push_notification(user_id, title, body, data=None):
     """Send a push notification to a user via FCM. Fails silently if not configured."""
     if not fcm_enabled:
+        # print("[FCM Disabled] Push skipped (no service account or library)")
         return
     
     try:
         user = users_col.find_one({"_id": ObjectId(user_id)})
         if not user:
-            print(f"[FCM Warning] User {user_id} not found in DB")
+            # print(f"[FCM Warning] User {user_id} not found in DB")
             return
         
         fcm_token = user.get('fcmToken')
         if not fcm_token:
-            print(f"[FCM Info] No registration token found for user {user_id}, skipping push")
+            # print(f"[FCM Info] No registration token found for user {user_id}, skipping push")
             return
         
+        # Construct message payload
         message = fcm_messaging.Message(
             notification=fcm_messaging.Notification(
                 title=title,
                 body=body,
             ),
-            data=data or {},
+            data={k: str(v) for k, v in (data or {}).items()},
             token=fcm_token,
         )
         
         response = fcm_messaging.send(message)
-        print(f"[FCM Success] Push sent to {user_id} ({user.get('username') or user.get('name')}): {response}")
+        print(f"[FCM Success] Push sent to {user_id}: {response}")
     except Exception as e:
         print(f"[FCM Error] Push failed for {user_id}: {e}")
 
@@ -215,20 +217,23 @@ def send_push_notification(user_id, title, body, data=None):
 def create_notification(user_id, title, message, notify_type, data=None):
     """
     Standardized notification service to save a notification to the DB.
-    Enforces fields: userId, title, message, type, data, isRead, createdAt.
+    Enforces consistency and automatically triggers a push notification.
     """
     try:
-        # Enforce consistency with requested MERN-style model
         notif_doc = {
             "userId": str(user_id),
             "title": title,
             "message": message,
-            "type": notify_type, # e.g. RIDE_ACCEPTED, PASSENGER_JOINED
+            "type": notify_type, 
             "data": data or {},
             "isRead": False,
-            "createdAt": datetime.now()
+            "createdAt": datetime.utcnow()
         }
         result = notifications_col.insert_one(notif_doc)
+        
+        # Automate push notification delivery
+        send_push_notification(user_id, title, message, data)
+        
         print(f"[Notif Service] Created {notify_type} notification for {user_id}")
         return str(result.inserted_id)
     except Exception as e:
@@ -564,6 +569,15 @@ def post_ride():
         result = rides_col.insert_one(ride_doc)
         print(f"DEBUG: Forward Ride created: {ride_doc['fromLocation']} -> {ride_doc['toLocation']} - ID: {result.inserted_id}")
 
+        # Notify driver
+        create_notification(
+            user_id=user_id,
+            title="Ride Posted Successfully",
+            message=f"Your ride to {ride_doc['toLocation']} is now live and bookable.",
+            notify_type="RIDE_POSTED",
+            data={"rideId": str(result.inserted_id)}
+        )
+
         if is_round_trip:
             print("DEBUG: Round trip detected: creating return ride...")
             return_ride = {
@@ -625,11 +639,18 @@ def search_rides():
             ride["id"] = ride.pop("_id", None)
             
             # Exclude current user's own rides
-            if user_id and (ride.get('createdBy') == user_id or ride.get('driverId') == user_id):
+            driver_id = str(ride.get('createdBy') or ride.get('driverId'))
+            if user_id and driver_id == str(user_id):
                 continue
             
-            # Exclude if user is already booked
-            if user_id and user_id in ride.get('bookedUsers', []):
+            # Exclude if user is already in passengers array (status is booked or joined)
+            passengers = ride.get('passengers', [])
+            if user_id and any(str(p.get('user')) == str(user_id) for p in passengers):
+                continue
+
+            # Exclude if ride is full based on capacity vs passengers count
+            capacity = int(ride.get('capacity', 1))
+            if len(passengers) >= capacity:
                 continue
             
             # Normalize fields for frontend compatibility
@@ -932,42 +953,46 @@ def optimize_rides():
 
 # --- Booking & Passenger Routes ---
 
+@app.route("/api/book-ride", methods=["POST", "OPTIONS"])
 @app.route("/api/rides/<ride_id>/book", methods=["POST", "OPTIONS"])
-def book_ride_rest(ride_id):
+def book_ride_rest(ride_id=None):
     """Passenger seat reservation."""
     if request.method == "OPTIONS":
         return handle_options(f"rides/{ride_id}/book")
     
     data = safe_json()
     user_id = data.get('userId')
+    ride_id = ride_id or data.get('rideId')
     
-    if not user_id:
-        return jsonify({"success": False, "message": "auth required"}), 401
+    if not user_id or not ride_id:
+        return jsonify({"success": False, "message": "auth and rideId required"}), 401
     
     try:
         ride = rides_col.find_one({"_id": ObjectId(ride_id)})
         if not ride:
             return jsonify({"success": False, "message": "Ride not found"}), 404
         
-        if ride.get('status') != 'available':
-            return jsonify({"success": False, "message": "Ride no longer available"}), 400
+        # Consistent status check: must be upcoming
+        if ride.get('status') != 'upcoming':
+            return jsonify({"success": False, "message": f"Ride is {ride.get('status')} and no longer bookable"}), 400
             
         passengers = ride.get('passengers', [])
-        if any(p['user'] == user_id for p in passengers):
+        if any(str(p.get('user')) == str(user_id) for p in passengers):
             return jsonify({"success": False, "message": "Already booked"}), 400
             
-        if len(passengers) >= ride.get('capacity', 1):
+        if len(passengers) >= int(ride.get('capacity', 1)):
              return jsonify({"success": False, "message": "Ride is full"}), 400
              
         user = users_col.find_one({"_id": ObjectId(user_id)})
         if user.get('isBanned'):
             return jsonify({"success": False, "message": "Account restricted"}), 403
             
-        # Add passenger
+        # Add passenger with explicit status
         new_passenger = {
             "user": user_id,
             "name": user.get('name') or user.get('username'),
             "collegeId": user.get('collegeId', 'N/A'),
+            "status": "booked", # Explicit status tracking
             "joined": False
         }
         
@@ -1001,26 +1026,38 @@ def book_ride_rest(ride_id):
         print(f"Booking Error: {e}")
         return jsonify({"success": False, "message": str(e)}), 500
 
+@app.route("/api/join-ride", methods=["POST", "PUT", "OPTIONS"])
 @app.route("/api/rides/<ride_id>/join", methods=["PUT", "OPTIONS"])
-def join_ride_rest(ride_id):
+def join_ride_rest(ride_id=None):
     """Passenger check-in (physical join)."""
     if request.method == "OPTIONS":
         return handle_options(f"rides/{ride_id}/join")
     
     data = safe_json()
     user_id = data.get('userId')
+    ride_id = ride_id or data.get('rideId')
+    
+    if not user_id or not ride_id:
+        return jsonify({"success": False, "message": "Missing userId or rideId"}), 400
     
     try:
         ride = rides_col.find_one({"_id": ObjectId(ride_id)})
         if not ride: return jsonify({"success": False, "message": "Ride not found"}), 404
         
+        # Guard: Only allow joining if the driver has started the ride
         if ride.get('status') != 'ongoing':
-            return jsonify({"success": False, "message": "Ride is not ongoing"}), 400
+            return jsonify({
+                "success": False, 
+                "message": "Ride has not started yet. You can only join once the driver starts the journey."
+            }), 400
             
-        # Update specific passenger 'joined' status
+        # Update specific passenger record
         res = rides_col.update_one(
             {"_id": ObjectId(ride_id), "passengers.user": user_id},
-            {"$set": {"passengers.$.joined": True}}
+            {"$set": {
+                "passengers.$.joined": True,
+                "passengers.$.status": "joined" # Standardized status update
+            }}
         )
         
         if res.modified_count > 0:
@@ -1134,9 +1171,9 @@ def _normalize_ride(doc, role, current_date_str):
     ride["from"] = from_loc
     ride["to"] = to_loc
     
-    stored_status = ride.get("status", "accepted")
+    stored_status = ride.get("status", "upcoming")
     if stored_status.lower() in ["scheduled", "upcoming", "accepted", "available"]:
-        ride["status"] = "accepted"
+        ride["status"] = "upcoming"
     else:
         ride["status"] = stored_status.lower() if isinstance(stored_status, str) else stored_status
 
@@ -1157,8 +1194,8 @@ def get_my_rides_v2(user_id):
     try:
         current_date_str = datetime.now().strftime('%Y-%m-%d')
 
-        posted = {"accepted": [], "ongoing": [], "completed": []}
-        booked = {"accepted": [], "ongoing": [], "completed": []}
+        posted = {"upcoming": [], "ongoing": [], "completed": []}
+        booked = {"upcoming": [], "ongoing": [], "completed": []}
 
         # Posted: driverId match or createdBy match
         for doc in rides_col.find({"$or": [{"driverId": user_id}, {"createdBy": user_id}]}):
@@ -1750,9 +1787,8 @@ def verify_user_decision(user_id_url=None):
             title=f"Verification {overall_status.capitalize()}",
             message=f"Your documents have been {overall_status}.{rejection_reason}",
             notify_type=notif_type,
-            data={"overallStatus": overall_status}
+            data={"overallStatus": str(overall_status)}
         )
-        send_push_notification(user_id, f"Verification {overall_status.capitalize()}", f"Your verification is {overall_status}", {"type": "verification"})
 
         # Special Notification: Role Upgraded
         if promote and overall_status == "approved":
@@ -1762,12 +1798,14 @@ def verify_user_decision(user_id_url=None):
                 message="Congratulations! Your driving privileges are now active. You can now post rides.",
                 notify_type="ROLE_UPGRADED"
             )
-            
+        
+        # Synchronize verifications_col status if used
+        verifications_col.update_one({"userId": user_id}, {"$set": {"status": overall_status}})
         # Return the updated user object for frontend sync
         updated_user = users_col.find_one({"_id": ObjectId(user_id)})
         return jsonify({
             "success": True, 
-            "message": "Decision finalized",
+            "message": "Decision finalized and roles synced",
             "user": parse_json(updated_user)
         }), 200
         
@@ -1938,8 +1976,17 @@ def admin_block_user():
         )
         if result.matched_count == 0:
             return jsonify({"success": False, "message": "User not found"}), 404
+            
+        # Notify User about restriction
+        create_notification(
+            user_id=user_id,
+            title="Account Restricted",
+            message="Your account has been restricted by an administrator. Please contact support.",
+            notify_type="ACCOUNT_BANNED"
+        )
+        
         print(f"Admin blocked user: {user_id}")
-        return jsonify({"success": True, "message": "User blocked successfully"}), 200
+        return jsonify({"success": True, "message": "User blocked and notified"}), 200
     except Exception as e:
         print(f"Admin Block User Error: {e}")
         return jsonify({"success": False, "message": "Database error"}), 500
@@ -2248,16 +2295,14 @@ def admin_approve_verification(user_id):
             {"$set": {"status": "approved"}}
         )
         
-        # Notify User
-        notifications_col.insert_one({
-            "userId": user_id,
-            "type": "verification",
-            "title": "Documents Verified",
-            "message": "Your identity documents have been approved. You now have full platform access.",
-            "isRead": False,
-            "createdAt": datetime.now()
-        })
-        send_push_notification(user_id, "Documents Verified", "Your identity documents have been approved.", {"type": "verification"})
+        # Notify User via Standardized Service (Automates Push)
+        create_notification(
+            user_id=user_id,
+            title="Documents Verified",
+            message="Your identity documents have been approved. You now have full platform access.",
+            notify_type="KYC_APPROVED",
+            data={"status": "approved"}
+        )
         
         updated_user = users_col.find_one({"_id": ObjectId(user_id)})
         return jsonify({
@@ -2291,16 +2336,14 @@ def admin_reject_verification(user_id):
             {"$set": {"status": "rejected"}}
         )
         
-        # Notify User
-        notifications_col.insert_one({
-            "userId": user_id,
-            "type": "verification",
-            "title": "Verification Rejected",
-            "message": "Your documents were rejected. Please re-upload clear copies.",
-            "isRead": False,
-            "createdAt": datetime.now()
-        })
-        send_push_notification(user_id, "Verification Rejected", "Your documents were rejected.", {"type": "verification"})
+        # Notify User via Standardized Service
+        create_notification(
+            user_id=user_id,
+            title="Verification Rejected",
+            message="Your documents were unfortunately rejected. Please review and re-upload correctly.",
+            notify_type="KYC_REJECTED",
+            data={"status": "rejected"}
+        )
         
         return jsonify({"success": True, "message": "Verification rejected"}), 200
     except Exception as e:

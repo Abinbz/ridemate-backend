@@ -9,107 +9,101 @@ function RideDetailsPage() {
   const { showToast } = useToast();
   const { ride } = location.state || {};
   const [userData, setUserData] = useState(null);
-  const [isBooking, setIsBooking] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const userId = localStorage.getItem('userId');
 
-  // Part 4.5: Security - Monitor user status on mount
-  useEffect(() => {
-    if (userId) {
-      const fetchStatus = async () => {
-        try {
-          const res = await fetch(`${API_BASE_URL}/api/user/${userId}`);
-          const data = await res.json();
-          if (data.success) {
-            setUserData(data.user);
-          }
-        } catch (err) {
-          console.error("Status check failed:", err);
-        }
-      };
-      fetchStatus();
-    }
-  }, [userId]);
+  // Helper: Find user status in manifest
+  const passengerRecord = Array.isArray(ride.passengers) ? ride.passengers.find(p => p.user === userId) : null;
+  const isBooked = !!passengerRecord;
+  const isJoined = passengerRecord?.status === 'joined' || passengerRecord?.joined;
+  const isDriver = (ride.createdBy || ride.driverId) === userId;
+  const isBanned = userData?.isBanned;
+  const rideStatus = ride.status?.toLowerCase();
 
-  if (!ride) {
-    return (
-      <div className="min-h-screen bg-white flex flex-col items-center justify-center p-6 space-y-6">
-        <h2 className="text-xl font-black text-black uppercase tracking-tighter">No ride details found</h2>
-        <button
-          onClick={() => navigate('/user/home')}
-          className="bg-black text-white px-8 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-gray-900 transition-all"
-        >
-          Go Back
-        </button>
-      </div>
-    );
-  }
-
-  const handleJoinRide = async () => {
-    const rideId = ride.id || ride._id;
-    const storedUser = JSON.parse(localStorage.getItem("user") || "{}");
-
+  const handleBooking = async () => {
     if (!userId) {
       showToast('Please log in to book a ride.', 'error');
       navigate('/');
       return;
     }
-
-    if (userData?.isBanned || storedUser?.isBanned) {
-      showToast('Your account is restricted from booking.', 'error');
-      return;
-    }
-
-    if (ride.status !== 'available' && ride.status !== 'accepted') {
-      showToast('This ride is no longer available for booking.', 'error');
-      return;
-    }
-
-    setIsBooking(true);
+    if (isBanned) return;
+    setIsProcessing(true);
     try {
-      const url = `${API_BASE_URL}/api/rides/${rideId}/book`;
-      console.log("API CALL:", url, 'POST');
-      const response = await fetch(url, {
+      const res = await fetch(`${API_BASE_URL}/api/book-ride`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId })
+        body: JSON.stringify({ userId, rideId: ride.id || ride._id })
       });
-      const data = await response.json();
-
-      if (response.ok && data.success) {
-        showToast('Ride booked successfully!', 'success');
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showToast('Seat reserved successfully!', 'success');
         navigate('/user/my-rides');
       } else {
-        showToast(data.message || 'Failed to book ride', 'error');
+        showToast(data.message || 'Booking failed', 'error');
       }
     } catch (err) {
-      console.error('Booking error:', err);
-      showToast('Server not reachable. Check backend connection.', 'error');
-    } finally {
-      setIsBooking(false);
-    }
+      showToast('Connection error', 'error');
+    } finally { setIsProcessing(false); }
+  };
+
+  const handleCheckIn = async () => {
+    setIsProcessing(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/join-ride`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, rideId: ride.id || ride._id })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showToast('Welcome aboard!', 'success');
+        navigate('/user/my-rides');
+      } else {
+        showToast(data.message, 'error');
+      }
+    } catch (err) {
+      showToast('Server error', 'error');
+    } finally { setIsProcessing(false); }
   };
 
   const handleMessage = () => {
     const driverId = ride.createdBy || ride.driverId;
-    const driverName = (typeof ride.driver === 'object' && ride.driver) ? ride.driver.name : (typeof ride.driver === 'string' ? ride.driver : "strategic_driver");
-
-    if (!driverId) {
-      showToast('Contact info not available.', 'error');
-      return;
-    }
-    navigate('/chat', { 
-      state: { 
-        receiverId: driverId, 
-        receiverName: driverName || "Unknown Driver"
-      } 
-    });
+    const driverName = (typeof ride.driver === 'object' && ride.driver) ? ride.driver.name : (typeof ride.driver === 'string' ? ride.driver : "Strategic Driver");
+    if (!driverId) return;
+    navigate('/chat', { state: { receiverId: driverId, receiverName: driverName } });
   };
 
-  const isJoined = Array.isArray(ride.passengers) ? ride.passengers.some(p => p.user === userId) : false;
-  const isDriver = (ride.createdBy || ride.driverId) === userId;
-  const isBanned = userData?.isBanned;
-  const rideStatus = ride.status?.toLowerCase();
-  const canJoin = (rideStatus === 'available' || rideStatus === 'accepted' || rideStatus === 'upcoming') && !isJoined && !isDriver && !isBanned;
+  // Button Logic Mapping
+  let buttonLabel = "Join Ride";
+  let buttonAction = null;
+  let disabled = false;
+
+  if (isDriver) {
+    buttonLabel = "Manage My Ride";
+    buttonAction = () => navigate('/user/my-rides/details', { state: { ride } });
+  } else if (rideStatus === 'completed') {
+    buttonLabel = "Ride Completed";
+    disabled = true;
+  } else if (rideStatus === 'ongoing') {
+    if (isJoined) {
+      buttonLabel = "Already Onboard";
+      disabled = true;
+    } else if (isBooked) {
+      buttonLabel = "Join Ride Now";
+      buttonAction = handleCheckIn;
+    } else {
+      buttonLabel = "Ride In Progress";
+      disabled = true;
+    }
+  } else if (rideStatus === 'upcoming') {
+    if (isBooked) {
+      buttonLabel = "Seat Reserved";
+      disabled = true;
+    } else {
+      buttonLabel = "Book Seat";
+      buttonAction = handleBooking;
+    }
+  }
 
   return (
     <div className="min-h-screen bg-white pb-32">
@@ -122,8 +116,10 @@ function RideDetailsPage() {
         </button>
         <div className="flex flex-col">
           <h1 className="text-sm font-black text-black uppercase tracking-widest leading-none">Ride Details</h1>
-          <span className="text-[8px] font-black uppercase text-amber-500 tracking-widest mt-0.5">
-            {ride?.status?.toString().toUpperCase() || "UPCOMING"}
+          <span className={`text-[8px] font-black uppercase tracking-widest mt-0.5 ${
+            rideStatus === 'ongoing' ? 'text-emerald-500' : rideStatus === 'completed' ? 'text-gray-300' : 'text-amber-500'
+          }`}>
+            {rideStatus?.toUpperCase() || "UPCOMING"}
           </span>
         </div>
       </div>
@@ -153,32 +149,6 @@ function RideDetailsPage() {
             </span>
           </div>
         </section>
-
-        {/* ── High-Fidelity User Info (Safeguard) ── */}
-        {(ride?.user || (typeof ride?.driver === 'object' && ride.driver)) && (
-          <div className="bg-gray-50/50 p-6 rounded-[2rem] border border-gray-100 flex items-center gap-4">
-            <div className="w-12 h-12 bg-black rounded-xl flex-shrink-0 flex items-center justify-center text-white overflow-hidden">
-              {(ride.user?.avatar || ride.driver?.avatar) ? (
-                <img src={ride.user?.avatar || ride.driver?.avatar} alt="user" className="w-full h-full object-cover" />
-              ) : (
-                <span className="text-xs font-black">
-                  {(ride.user?.name || ride.driver?.name || ride.driver?.username || "U")[0]?.toUpperCase()}
-                </span>
-              )}
-            </div>
-            <div className="flex-1">
-              <h4 className="text-xs font-black text-black uppercase tracking-tight">
-                {ride.user?.name || ride.driver?.name || ride.driver?.username || "Verified Member"}
-              </h4>
-              <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">
-                {ride.user?.email || ride.driver?.email || "Community Intelligence"}
-              </p>
-            </div>
-            <div className="bg-white px-3 py-1.5 rounded-full border border-gray-100 flex items-center gap-1.5">
-              <span className="text-[10px] font-black text-black">⭐ {(ride.user?.rating || ride.driver?.rating) || '5.0'}</span>
-            </div>
-          </div>
-        )}
 
         {/* ── Vehicle Info ── */}
         <section className="border border-gray-100 rounded-[2.5rem] p-8 flex items-center justify-between">
@@ -220,15 +190,9 @@ function RideDetailsPage() {
               </div>
             </div>
           </div>
-
-          <div className="bg-gray-50 p-6 rounded-[2rem] text-center">
-            <p className="text-[10px] font-black text-black uppercase tracking-widest">
-              Duration: <span className="text-gray-400">{ride?.duration || "Variable"}</span> | Capacity: <span className="text-gray-400">{ride?.passengers || 0} Seats</span>
-            </p>
-          </div>
         </section>
 
-        {/* ── Passenger Manifest (NEW) ── */}
+        {/* ── Passenger Manifest ── */}
         <section className="space-y-6">
           <div className="flex items-center justify-between border-b border-gray-50 pb-2">
             <h3 className="text-[10px] font-black text-black uppercase tracking-widest">Passenger Manifest</h3>
@@ -241,22 +205,22 @@ function RideDetailsPage() {
                 <div key={idx} className="flex items-center justify-between bg-gray-50/50 p-4 rounded-2xl border border-gray-50">
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 bg-black rounded-lg flex items-center justify-center text-[9px] font-black text-white">
-                      {p.avatar || (p.name || 'P')[0].toUpperCase()}
+                      {(p.name || 'P')[0].toUpperCase()}
                     </div>
                     <div>
-                      <p className="text-[10px] font-black text-black uppercase tracking-tight">{p.name}</p>
+                      <p className="text-[10px] font-black text-black uppercase tracking-tight">{p.name || "Passenger"}</p>
                       <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">{p.collegeId || 'ID Verified'}</p>
                     </div>
                   </div>
                   <span className={`text-[7px] font-black uppercase px-3 py-1 rounded-full border ${
-                    p.joined ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-white text-gray-300 border-gray-100'
+                    p.status === 'joined' || p.joined ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-white text-gray-300 border-gray-100'
                   }`}>
-                    {p.joined ? 'Boarded' : 'Reserved'}
+                    {p.status === 'joined' || p.joined ? 'Boarded' : 'Reserved'}
                   </span>
                 </div>
               ))
             ) : (
-              <p className="text-[9px] font-bold text-gray-300 uppercase tracking-widest text-center py-4 italic">No passengers have joined yet.</p>
+              <p className="text-[9px] font-bold text-gray-300 uppercase tracking-widest text-center py-4 italic">No passengers yet.</p>
             )}
           </div>
         </section>
@@ -281,17 +245,17 @@ function RideDetailsPage() {
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-50 p-6 flex gap-4 z-50">
         <button
           onClick={handleMessage}
-          className="flex-1 py-5 border border-black rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-black hover:text-white transition-all text-black uppercase"
+          className="flex-1 py-5 border border-black rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-black hover:text-white transition-all text-black"
         >
           Message
         </button>
         <button
-          onClick={handleJoinRide}
-          disabled={isBooking || isBanned || isJoined || isDriver || (rideStatus !== 'upcoming' && rideStatus !== 'available' && rideStatus !== 'accepted')}
+          onClick={buttonAction}
+          disabled={disabled || isProcessing || isBanned}
           className={`flex-[1.5] py-5 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest active:scale-[0.98] transition-all
-            ${isBooking || isBanned || isJoined || isDriver || (rideStatus !== 'upcoming' && rideStatus !== 'available' && rideStatus !== 'accepted') ? 'bg-gray-300 cursor-not-allowed' : 'bg-black hover:bg-gray-900'}`}
+            ${disabled || isProcessing || isBanned ? 'bg-gray-300 cursor-not-allowed' : 'bg-black hover:bg-gray-900'}`}
         >
-          {isBooking ? 'Joining...' : isBanned ? 'Restricted' : isJoined ? 'Joined' : isDriver ? 'Your Ride' : (rideStatus === 'upcoming' || rideStatus === 'available' || rideStatus === 'accepted') ? 'Join Ride' : 'Ride Closed'}
+          {isProcessing ? 'Processing...' : isBanned ? 'Restricted' : buttonLabel}
         </button>
       </div>
     </div>
